@@ -1,0 +1,41 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EchoFish Topics
+
+
+Resources:
+
+  DeadLetterTopic:
+    Type: AWS::SNS::Topic
+
+  File2ZarrTopic:
+    Type: AWS::SNS::Topic
+
+  GeoJsonLandedTopic:
+    Type: AWS::SNS::Topic
+
+  ZarrAccumulatorTrackingTopic:
+    Type: AWS::SNS::Topic
+
+  ZarrAccumulatorReadyTopic:
+    Type: AWS::SNS::Topic
+
+  ZarrAccumulatorDoneTopic:
+    Type: AWS::SNS::Topic
+
+
+Outputs:
+  File2ZarrTopicArn:
+    Value: !Ref File2ZarrTopic
+  GeoJsonLandedTopicArn:
+    Value: !Ref GeoJsonLandedTopic
+  ZarrAccumulatorTrackingTopicArn:
+    Value: !Ref ZarrAccumulatorTrackingTopic
+  ZarrAccumulatorDoneTopicArn:
+    Value: !Ref ZarrAccumulatorDoneTopic
+  ZarrAccumulatorReadyTopicArn:
+    Value: !Ref ZarrAccumulatorReadyTopic
+  DeadLetterTopicArn:
+    Value: !Ref DeadLetterTopic
+
+
+

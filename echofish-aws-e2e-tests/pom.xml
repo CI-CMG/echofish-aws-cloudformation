@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <artifactId>echofish-aws-cloudformation-parent</artifactId>
+    <groupId>edu.colorado.cires.cmg.echofish</groupId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+
+  <artifactId>echofish-aws-e2e-tests</artifactId>
+
+  <properties>
+    <maven.compiler.release>11</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <deployment.params></deployment.params>
+    <stack.params></stack.params>
+    <deployment.stack.name></deployment.stack.name>
+    <stack.name></stack.name>
+    <repository.bucket>cires-cmg-echofish-repository</repository.bucket>
+    <local.resources></local.resources>
+    <awssdk.version>1.11.799</awssdk.version>
+    <slf4j.version>1.7.30</slf4j.version>
+    <log4j.version>2.14.0</log4j.version>
+  </properties>
+
+
+  <dependencies>
+    <dependency>
+      <groupId>edu.colorado.cires.cmg.echofish</groupId>
+      <artifactId>echofish-aws-data-utils</artifactId>
+      <version>1.0.0-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-cloudformation</artifactId>
+      <version>${awssdk.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>jcl-over-slf4j</artifactId>
+      <version>${slf4j.version}</version>
+    </dependency>
+
+
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-api</artifactId>
+      <version>${log4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>${log4j.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-slf4j-impl</artifactId>
+      <version>${log4j.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>com.amazonaws</groupId>
+      <artifactId>aws-java-sdk-dynamodb</artifactId>
+      <version>${awssdk.version}</version>
+    </dependency>
+
+    <dependency>
+      <groupId>javax.xml.bind</groupId>
+      <artifactId>jaxb-api</artifactId>
+      <version>2.3.1</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>2.8.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-csv</artifactId>
+      <version>1.7</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <version>5.7.0</version>
+      <scope>test</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.hamcrest</groupId>
+      <artifactId>hamcrest</artifactId>
+      <version>2.2</version>
+      <scope>test</scope>
+    </dependency>
+
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.codehaus.mojo</groupId>
+          <artifactId>exec-maven-plugin</artifactId>
+          <version>1.6.0</version>
+        </plugin>
+        <plugin>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <version>3.8.1</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
+
+  </build>
+
+  <profiles>
+
+    <profile>
+      <id>upload-stack</id>
+      <activation>
+        <property>
+          <name>deployment.params</name>
+        </property>
+      </activation>
+      <build>
+
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>update-stack</id>
+                <phase>validate</phase>
+                <goals>
+                  <goal>java</goal>
+                </goals>
+                <configuration>
+                  <mainClass>edu.colorado.cires.cmg.echofish.e2e.operations.StackOperations</mainClass>
+                  <classpathScope>test</classpathScope>
+                  <arguments>
+                    <argument>update-stack</argument>
+                    <argument>${deployment.params}</argument>
+                    <argument>${stack.params}</argument>
+                    <argument>${deployment.stack.name}</argument>
+                    <argument>${stack.name}</argument>
+                    <argument>${project.parent.basedir}/echofish-aws-cloudformation</argument>
+                    <argument>${project.version}</argument>
+                    <argument>${repository.bucket}</argument>
+                    <argument>${local.resources}</argument>
+                  </arguments>
+                  <cleanupDaemonThreads>false</cleanupDaemonThreads>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+
+      </build>
+    </profile>
+
+
+    <profile>
+      <id>it</id>
+      <build>
+        <plugins>
+
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>create-stack</id>
+                <phase>pre-integration-test</phase>
+                <goals>
+                  <goal>java</goal>
+                </goals>
+                <configuration>
+                  <mainClass>edu.colorado.cires.cmg.echofish.e2e.operations.StackOperations</mainClass>
+                  <classpathScope>test</classpathScope>
+                  <arguments>
+                    <argument>create-stack</argument>
+                    <argument>${project.version}</argument>
+                    <argument>${project.parent.basedir}/echofish-aws-cloudformation</argument>
+                    <argument>${basedir}</argument>
+                    <argument>${repository.bucket}</argument>
+                    <argument>${local.resources}</argument>
+                  </arguments>
+                  <cleanupDaemonThreads>false</cleanupDaemonThreads>
+                </configuration>
+              </execution>
+              <execution>
+                <id>delete-stack</id>
+                <phase>post-integration-test</phase>
+                <goals>
+                  <goal>java</goal>
+                </goals>
+                <configuration>
+                  <mainClass>edu.colorado.cires.cmg.echofish.e2e.operations.StackOperations</mainClass>
+                  <classpathScope>test</classpathScope>
+                  <arguments>
+                    <argument>delete-stack</argument>
+                    <argument>${basedir}</argument>
+                  </arguments>
+                  <cleanupDaemonThreads>false</cleanupDaemonThreads>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+
+          <!--          <plugin>-->
+          <!--            <groupId>org.apache.maven.plugins</groupId>-->
+          <!--            <artifactId>maven-failsafe-plugin</artifactId>-->
+          <!--            <version>2.22.2</version>-->
+          <!--            <executions>-->
+          <!--              <execution>-->
+          <!--                <goals>-->
+          <!--                  <goal>integration-test</goal>-->
+          <!--                  <goal>verify</goal>-->
+          <!--                </goals>-->
+          <!--              </execution>-->
+          <!--            </executions>-->
+          <!--            <configuration>-->
+          <!--              <systemPropertyVariables>-->
+          <!--                <project.basedir>${project.basedir}</project.basedir>-->
+          <!--                <zipper.timeout>${zipper.timeout}</zipper.timeout>-->
+          <!--                <zipper.pollInterval>${zipper.pollInterval}</zipper.pollInterval>-->
+          <!--                <zipper.ingestAll>${zipper.ingestAll}</zipper.ingestAll>-->
+          <!--              </systemPropertyVariables>-->
+          <!--            </configuration>-->
+          <!--          </plugin>-->
+        </plugins>
+      </build>
+    </profile>
+
+  </profiles>
+
+
+
+
+
+</project>

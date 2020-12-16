@@ -1,0 +1,14 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EchoFish Queues
+
+
+Resources:
+
+  MvtGenerationQueue:
+    Type: AWS::SQS::Queue
+
+Outputs:
+  MvtGenerationQueueUrl:
+    Value: !Ref MvtGenerationQueue
+  MvtGenerationQueueArn:
+    Value: !GetAtt MvtGenerationQueue.Arn

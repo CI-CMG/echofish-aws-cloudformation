@@ -1,0 +1,10 @@
+[
+  {
+    "ParameterKey": "LambdaRolePermissionsBoundary",
+    "ParameterValue": "CIRES_Admin_PermissionBoundary"
+  },
+  {
+    "ParameterKey": "DataSetBucketName",
+    "ParameterValue": "ncei-wcsd-archive"
+  }
+]

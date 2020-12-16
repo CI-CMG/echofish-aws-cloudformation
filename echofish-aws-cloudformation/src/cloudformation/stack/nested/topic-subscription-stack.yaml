@@ -1,0 +1,432 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EchoFish Topic Subscriptions
+
+
+Parameters:
+  BucketSnsNotificationLambdaVersion:
+    Type: String
+  DeploymentBucketName:
+    Type: String
+  LambdaRolePermissionsBoundary:
+    Type: String
+  File2ZarrTopicArn:
+    Type: String
+  GeoJsonLandedTopicArn:
+    Type: String
+  GeoJsonBucketName:
+    Type: String
+  GeoJsonBucketArn:
+    Type: String
+  MvtGenerationQueueArn:
+    Type: String
+  MvtGenerationQueueUrl:
+    Type: String
+  DeployGeometryMvtPipelineLambdaArn:
+    Type: String
+  DeployGeometryMvtPipelineLambdaName:
+    Type: String
+  File2ZarrLambdaArn:
+    Type: String
+  File2ZarrLambdaName:
+    Type: String
+  DeadLetterTopicArn:
+    Type: String
+  ZarrAccumulatorReadyTopicArn:
+    Type: String
+  ZarrAccumulatorDoneTopicArn:
+    Type: String
+  ZarrAccumulatorLambdaArn:
+    Type: String
+  ZarrAccumulatorLambdaName:
+    Type: String
+  Zarr2GeoJsonLambdaArn:
+    Type: String
+
+Conditions:
+  HasPermissionsBoundary:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - !Ref LambdaRolePermissionsBoundary
+
+
+Resources:
+
+  BucketSnsNotificationCustomResourceLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary:
+        Fn::If:
+          - HasPermissionsBoundary
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaRolePermissionsBoundary}
+          - AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+        - PolicyName: S3Bucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${GeoJsonBucketName}
+                Action:
+                  - s3:GetBucketNotification
+                  - s3:PutBucketNotification
+
+  BucketSnsNotificationCustomResourceLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/echofish-aws-custom-resource-${BucketSnsNotificationLambdaVersion}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.resource.BucketSnsNotificationLambda::handleRequest
+      Runtime: java11
+      MemorySize: 512
+      Timeout: 120
+      Role: !GetAtt BucketSnsNotificationCustomResourceLambdaRole.Arn
+
+
+
+  GeoJsonLandedTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref GeoJsonLandedTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Id:
+          Fn::Sub:
+            - GeoJsonLandedTopicPolicy-${StackUuid}
+            - StackUuid:
+                Fn::Select:
+                  - "2"
+                  - Fn::Split:
+                      - "/"
+                      - !Ref AWS::StackId
+        Statement:
+          - Sid: SubscribeToTopic
+            Resource: !Ref GeoJsonLandedTopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Subscribe
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt BucketSnsNotificationCustomResourceLambda.Arn
+          - Sid: PublishToTopic
+            Resource: !Ref GeoJsonLandedTopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Publish
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref Zarr2GeoJsonLambdaArn
+#          - Sid: PublishToTopic
+#            Effect: Allow
+#            Principal:
+#              Service:
+#                - s3.amazonaws.com
+#            Resource: !Ref GeoJsonLandedTopicArn
+#            Action:
+#              - sns:Publish
+#            Condition:
+#              ArnEquals:
+#                aws:SourceArn: !Ref GeoJsonBucketArn
+
+
+#  GeoJsonBucketNotification:
+#    Type: Custom::GeoJsonBucketNotification
+#    DependsOn:
+#      - GeoJsonLandedTopicPolicy
+#    Properties:
+#      ServiceToken: !GetAtt BucketSnsNotificationCustomResourceLambda.Arn
+#      physicalResourceId: !Ref GeoJsonBucketName
+#      snsTopicArn: !Ref GeoJsonLandedTopicArn
+#      configName: GeoJsonBucketNotification
+#      bucketName: !Ref GeoJsonBucketName
+#      suffix: .zip
+
+
+  MvtGenerationQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref MvtGenerationQueueUrl
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublishToTopic
+            Resource: !Ref MvtGenerationQueueArn
+            Effect: Allow
+            Principal:
+              Service:
+                - sns.amazonaws.com
+            Action:
+              - sqs:SendMessage
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref GeoJsonLandedTopicArn
+
+  SubscribeGeoJsonLandedTopicMvtGenerationQueue:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      Endpoint: !Ref MvtGenerationQueueArn
+      TopicArn: !Ref GeoJsonLandedTopicArn
+
+
+  SubscribeGeoJsonLandedTopicDeployGeometryMvtPipeline:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !Ref DeployGeometryMvtPipelineLambdaArn
+      TopicArn: !Ref GeoJsonLandedTopicArn
+
+  TriggerDeployGeometryMvtPipelineLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DeployGeometryMvtPipelineLambdaName
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref GeoJsonLandedTopicArn
+
+
+  File2ZarrTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref File2ZarrTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Id:
+          Fn::Sub:
+            - File2ZarrTopicPolicy-${StackUuid}
+            - StackUuid:
+                Fn::Select:
+                  - "2"
+                  - Fn::Split:
+                      - "/"
+                      - !Ref AWS::StackId
+        Statement:
+          - Sid: SubscribeToTopic
+            Resource: !Ref File2ZarrTopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Subscribe
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref File2ZarrLambdaArn
+# TODO set publish from API lambda
+#          - Sid: PublishToTopic
+#            Resource: !Ref File2ZarrTopicArn
+#            Effect: Allow
+#            Principal:
+#              Service:
+#                - lambda.amazonaws.com
+#            Action:
+#              - sns:Publish
+#            Condition:
+#              ArnEquals:
+#                aws:SourceArn: !Ref AMStatGeometryLambdaArn
+
+  SubscribeFile2ZarrTopicFile2ZarrLambda:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !Ref File2ZarrLambdaArn
+      TopicArn: !Ref File2ZarrTopicArn
+
+  TriggerGeometryDoneEnrichmentLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref File2ZarrLambdaName
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref File2ZarrTopicArn
+
+
+
+  ZarrAccumulatorReadyTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ZarrAccumulatorReadyTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Id:
+          Fn::Sub:
+            - ZarrAccumulatorReadyTopicPolicy-${StackUuid}
+            - StackUuid:
+                Fn::Select:
+                  - "2"
+                  - Fn::Split:
+                      - "/"
+                      - !Ref AWS::StackId
+        Statement:
+          - Sid: SubscribeToTopic
+            Resource: !Ref ZarrAccumulatorReadyTopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Subscribe
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref ZarrAccumulatorLambdaArn
+          - Sid: PublishToTopic
+            Resource: !Ref ZarrAccumulatorReadyTopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Publish
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref File2ZarrLambdaArn
+
+  SubscribeZarrAccumulatorReadyTopicZarrAccumulatorLambda:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !Ref ZarrAccumulatorLambdaArn
+      TopicArn: !Ref ZarrAccumulatorReadyTopicArn
+
+  TriggerZarrAccumulatorLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ZarrAccumulatorLambdaName
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref ZarrAccumulatorReadyTopicArn
+
+
+
+  ZarrAccumulatorDoneTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ZarrAccumulatorDoneTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Id:
+          Fn::Sub:
+            - ZarrAccumulatorDoneTopicPolicy-${StackUuid}
+            - StackUuid:
+                Fn::Select:
+                  - "2"
+                  - Fn::Split:
+                      - "/"
+                      - !Ref AWS::StackId
+        Statement:
+          - Sid: SubscribeToTopic
+            Resource: !Ref ZarrAccumulatorDoneTopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Subscribe
+            Condition:
+              ForAnyValue:ArnEquals:
+                aws:SourceArn:
+                  - !Ref Zarr2GeoJsonLambdaArn
+          - Sid: PublishToTopic
+            Resource: !Ref ZarrAccumulatorDoneTopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Publish
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref ZarrAccumulatorLambdaArn
+
+  SubscribeZarrAccumulatorDoneTopicZarr2GeoJsonLambda:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !Ref Zarr2GeoJsonLambdaArn
+      TopicArn: !Ref ZarrAccumulatorDoneTopicArn
+
+  TriggerZarr2GeoJsonLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Zarr2GeoJsonLambdaArn
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref ZarrAccumulatorDoneTopicArn
+
+
+  DeadLetterTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref DeadLetterTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Id:
+          Fn::Sub:
+            - DeadLetterTopicPolicy-${StackUuid}
+            - StackUuid:
+                Fn::Select:
+                  - "2"
+                  - Fn::Split:
+                      - "/"
+                      - !Ref AWS::StackId
+        Statement:
+# TODO set up error lambda
+#          - Sid: SubscribeToTopic
+#            Resource: !Ref DeadLetterTopicArn
+#            Effect: Allow
+#            Principal:
+#              Service:
+#                - lambda.amazonaws.com
+#            Action:
+#              - sns:Subscribe
+#            Condition:
+#              ArnEquals:
+#                aws:SourceArn: !Ref ErrorLambdaArn
+          - Sid: PublishToTopic
+            Effect: Allow
+            Resource: !Ref DeadLetterTopicArn
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Publish
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !Ref File2ZarrLambdaArn
+                  - !Ref ZarrAccumulatorLambdaArn
+
+

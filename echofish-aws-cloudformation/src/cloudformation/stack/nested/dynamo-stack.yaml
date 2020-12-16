@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EchoFish DynamoDB configuration
+
+Parameters:
+  StackPrefix:
+    Description: A prefix that identifies this stack
+    Type: String
+  EnvironmentType:
+    Type: String
+
+Conditions:
+  IsProduction:
+    !Equals [!Ref EnvironmentType, prod]
+  IsDev:
+    !Equals [!Ref EnvironmentType, dev]
+
+Resources:
+
+  File2ZarrTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      TableName: !Sub ${StackPrefix}-File2Zarr
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: job
+          AttributeType: S
+        - AttributeName: file
+          AttributeType: S
+      KeySchema:
+        - AttributeName: job
+          KeyType: HASH
+        - AttributeName: file
+          KeyType: RANGE
+
+
+  JobLockTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      TableName: !Sub ${StackPrefix}-JobLock
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: job
+          AttributeType: S
+      KeySchema:
+        - AttributeName: job
+          KeyType: HASH
+
+
+Outputs:
+  JobLockTableName:
+    Value: !Ref JobLockTable
+  JobLockTableArn:
+    Value: !GetAtt JobLockTable.Arn
+  File2ZarrTableName:
+    Value: !Ref File2ZarrTable
+  File2ZarrTableArn:
+    Value: !GetAtt File2ZarrTable.Arn

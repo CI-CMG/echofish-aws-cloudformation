@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Zarr store to GeoJSON
+
+Parameters:
+  DeploymentBucketName:
+    Type: String
+  LambdaRolePermissionsBoundary:
+    Type: String
+  Zarr2GeoJsonLambdaMaxConcurrency:
+    Type: Number
+  Zarr2GeoJsonLambdaTimeout:
+    Type: Number
+  Zarr2GeoJsonLambdaMemorySize:
+    Type: Number
+  ZarrStoreBucketName:
+    Type: String
+  GeoJsonBucketName:
+    Type: String
+  LogRetentionInDays:
+    Type: Number
+  DeadLetterTopicArn:
+    Type: String
+  Version:
+    Type: String
+  ZarrAccumulatorDoneTopicArn:
+    Type: String
+  GeoJsonLandedTopicArn:
+    Type: String
+
+
+Conditions:
+  HasPermissionsBoundary:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - !Ref LambdaRolePermissionsBoundary
+
+Resources:
+
+  Zarr2GeoJsonLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary:
+        Fn::If:
+          - HasPermissionsBoundary
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaRolePermissionsBoundary}
+          - AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+        - PolicyName: S3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ZarrStoreBucketName}/*
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ZarrStoreBucketName}
+                Action:
+                  - s3:ListBucket
+        - PolicyName: SNS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Ref DeadLetterTopicArn
+                  - !Ref GeoJsonLandedTopicArn
+                Action:
+                  - sns:Publish
+
+  Zarr2GeoJsonLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/echofish-aws-zarr-geojson-lambda-${Version}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.zarrgeojson.Zarr2GeoJsonLambda::handleRequest
+      Runtime: java11
+      MemorySize: !Ref Zarr2GeoJsonLambdaMemorySize
+      Timeout: !Ref Zarr2GeoJsonLambdaTimeout
+      ReservedConcurrentExecutions: !Ref Zarr2GeoJsonLambdaMaxConcurrency
+      Role: !GetAtt Zarr2GeoJsonLambdaRole.Arn
+      Environment:
+        Variables:
+          ZARR_STORE_BUCKET_NAME: !Ref ZarrStoreBucketName
+          GEOJSON_BUCKET_NAME: !Ref GeoJsonBucketName
+          GEOJSON_LANDED_TOPIC_ARN: !Ref GeoJsonLandedTopicArn
+
+  Zarr2GeoJsonLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${Zarr2GeoJsonLambda}
+      RetentionInDays: !Ref LogRetentionInDays
+
+  Zarr2GeoJsonLambdaEvent:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref Zarr2GeoJsonLambda
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0
+      DestinationConfig:
+        OnFailure:
+          Destination: !Ref DeadLetterTopicArn
+
+
+Outputs:
+  Zarr2GeoJsonLambdaArn:
+    Value: !GetAtt Zarr2GeoJsonLambda.Arn
+  Zarr2GeoJsonLambdaName:
+    Value: !Ref Zarr2GeoJsonLambda
+
+
+
+

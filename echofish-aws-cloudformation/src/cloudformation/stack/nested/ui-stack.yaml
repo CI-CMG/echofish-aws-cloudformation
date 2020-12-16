@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Echofish UI
+
+Parameters:
+  DeploymentBucketName:
+    Type: String
+  UiBucketName:
+    Type: String
+  LambdaRolePermissionsBoundary:
+    Type: String
+  LogRetentionInDays:
+    Type: Number
+  Version:
+    Type: String
+  RestApiUrl:
+    Type: String
+  MvtBaseUrl:
+    Type: String
+#  OAuthClientId:
+#    Type: String
+  StackPrefix:
+    Type: String
+
+Conditions:
+  HasPermissionsBoundary:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - !Ref LambdaRolePermissionsBoundary
+
+Resources:
+
+  UiDeploymentLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary:
+        Fn::If:
+          - HasPermissionsBoundary
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaRolePermissionsBoundary}
+          - AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+        - PolicyName: S3Bucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${DeploymentBucketName}/*
+                Action:
+                  - s3:GetObject
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${UiBucketName}/*
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${UiBucketName}
+                Action:
+                  - s3:ListBucket
+
+  UiDeploymentLambdaResource:
+    Type: Custom::UiDeployment
+    Properties:
+      ServiceToken: !GetAtt UiDeploymentLambda.Arn
+      physicalResourceId: !Ref Version
+      uiBucket: !Ref UiBucketName
+      deploymentBucket: !Ref DeploymentBucketName
+      artifactKey: !Sub ui/echofish-aws-ui-${Version}-zip.zip
+      apiBaseUrl: !Ref RestApiUrl
+      mvtBaseUrl: !Ref MvtBaseUrl
+#      tokenBaseUrl: !Ref TokenProviderUrl
+#      clientId: !Ref OAuthClientId
+      stackPrefix: !Ref StackPrefix
+
+  UiDeploymentLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Echofish UI Frontend
+      Code:
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/echofish-aws-custom-resource-${Version}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.resource.DeployUiLambda::handleRequest
+      Runtime: java11
+      MemorySize: 512
+      Timeout: 120
+      Role: !GetAtt UiDeploymentLambdaRole.Arn
+

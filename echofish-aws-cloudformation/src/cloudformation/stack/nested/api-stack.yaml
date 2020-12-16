@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EchoFish API
+
+Parameters:
+  DeploymentBucketName:
+    Type: String
+  LambdaRolePermissionsBoundary:
+    Type: String
+  ApiLambdaMemorySize:
+    Type: Number
+  ApiLambdaTimeout:
+    Type: Number
+  LogRetentionInDays:
+    Type: Number
+  Version:
+    Type: String
+  ApiLambdaMaxConcurrency:
+    Type: Number
+
+
+Conditions:
+  HasPermissionsBoundary:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - !Ref LambdaRolePermissionsBoundary
+
+Resources:
+
+  ApiLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary:
+        Fn::If:
+          - HasPermissionsBoundary
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaRolePermissionsBoundary}
+          - AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+
+
+  ApiLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Handles API requests
+      Code:
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/echofish-aws-api-${Version}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.api.StreamLambdaHandler::handleRequest
+      Runtime: java11
+      MemorySize: !Ref ApiLambdaMemorySize
+      Timeout: !Ref ApiLambdaTimeout
+      ReservedConcurrentExecutions: !Ref ApiLambdaMaxConcurrency
+      Role: !GetAtt ApiLambdaRole.Arn
+#      Environment:
+#        Variables:
+#          SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUERURI: !Ref CognitoUserPoolProviderURL
+
+  ApiLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ApiLambda}
+      RetentionInDays: !Ref LogRetentionInDays
+
+
+Outputs:
+  ApiLambdaArn:
+    Value: !GetAtt ApiLambda.Arn
+  ApiLambdaName:
+    Value: !Ref ApiLambda
