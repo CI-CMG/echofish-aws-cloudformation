@@ -14,7 +14,7 @@ phases:
       - echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin
   build:
     commands:
-      - mvn -B -Pit deploy
+      - mvn -B deploy
 artifacts:
   files:
     - '**/*'
