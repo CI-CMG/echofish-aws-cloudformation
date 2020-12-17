@@ -19,4 +19,38 @@
     <module>echofish-aws-build</module>
   </modules>
 
+  <distributionManagement>
+    <snapshotRepository>
+      <id>echofish-snapshot-dist</id>
+      <url>s3://cires-cmg-echofish-repository/snapshot</url>
+    </snapshotRepository>
+    <repository>
+      <id>echofish-release-dist</id>
+      <url>s3://cires-cmg-echofish-repository/release</url>
+    </repository>
+  </distributionManagement>
+
+  <repositories>
+    <repository>
+      <id>echofish-snapshot</id>
+      <url>https://cires-cmg-echofish-repository.s3-us-west-2.amazonaws.com/snapshot</url>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots>
+        <enabled>true</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>echofish-release</id>
+      <url>https://cires-cmg-echofish-repository.s3-us-west-2.amazonaws.com/release</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+  </repositories>
+
 </project>
