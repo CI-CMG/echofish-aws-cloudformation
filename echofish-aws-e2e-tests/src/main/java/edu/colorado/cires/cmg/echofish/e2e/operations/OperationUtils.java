@@ -41,7 +41,7 @@ public final class OperationUtils {
     Path bundle = cfTargetDir.resolve(String.format("%s.zip", name));
     Path bundleDir = cfTargetDir.resolve(name);
 
-    Path csvPath = cfTargetDir.resolve("cloudformation").resolve("resources.csv");
+    Path csvPath = cfTargetDir.resolve("resources").resolve("resources.csv");
 
     if (!Files.exists(bundleDir)) {
       unzip(bundle, cfTargetDir);

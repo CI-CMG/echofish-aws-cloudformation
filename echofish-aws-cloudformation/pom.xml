@@ -32,58 +32,6 @@
     <maven.build.timestamp.format>yyyyMMddHHmmss</maven.build.timestamp.format>
   </properties>
 
-  <dependencies>
-    <!--    <dependency>-->
-    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-    <!--      <artifactId>echofish-aws-custom-resource</artifactId>-->
-    <!--      <version>1.0.0-SNAPSHOT</version>-->
-    <!--      <classifier>lambda</classifier>-->
-    <!--      <type>zip</type>-->
-    <!--    </dependency>-->
-    <!--    <dependency>-->
-    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-    <!--      <artifactId>echofish-aws-api</artifactId>-->
-    <!--      <version>1.0.0-SNAPSHOT</version>-->
-    <!--      <classifier>lambda</classifier>-->
-    <!--      <type>zip</type>-->
-    <!--    </dependency>-->
-    <!--    <dependency>-->
-    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-    <!--      <artifactId>echofish-aws-ui</artifactId>-->
-    <!--      <version>1.0.0-SNAPSHOT</version>-->
-    <!--      <classifier>zip</classifier>-->
-    <!--      <type>zip</type>-->
-    <!--    </dependency>-->
-    <!--    <dependency>-->
-    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-    <!--      <artifactId>echofish-aws-dynamic-stack</artifactId>-->
-    <!--      <version>1.0.0-SNAPSHOT</version>-->
-    <!--      <classifier>lambda</classifier>-->
-    <!--      <type>zip</type>-->
-    <!--    </dependency>-->
-    <!--    <dependency>-->
-    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-    <!--      <artifactId>echofish-aws-file2zarr-lambda</artifactId>-->
-    <!--      <version>1.0.0-SNAPSHOT</version>-->
-    <!--      <classifier>lambda</classifier>-->
-    <!--      <type>zip</type>-->
-    <!--    </dependency>-->
-    <!--    <dependency>-->
-    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-    <!--      <artifactId>echofish-aws-zarr-accumulator-lambda</artifactId>-->
-    <!--      <version>1.0.0-SNAPSHOT</version>-->
-    <!--      <classifier>lambda</classifier>-->
-    <!--      <type>zip</type>-->
-    <!--    </dependency>-->
-    <!--    <dependency>-->
-    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-    <!--      <artifactId>echofish-aws-zarr-geojson-lambda</artifactId>-->
-    <!--      <version>1.0.0-SNAPSHOT</version>-->
-    <!--      <classifier>lambda</classifier>-->
-    <!--      <type>zip</type>-->
-    <!--    </dependency>-->
-  </dependencies>
-
 
   <build>
 
@@ -97,10 +45,35 @@
 
     <plugins>
 
+
+
+
+
+
       <plugin>
         <artifactId>maven-resources-plugin</artifactId>
         <version>3.1.0</version>
         <executions>
+          <execution>
+            <id>resources</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${basedir}/target/resources</outputDirectory>
+              <useDefaultDelimiters>false</useDefaultDelimiters>
+              <delimiters>
+                <delimiter>@</delimiter>
+              </delimiters>
+              <resources>
+                <resource>
+                  <directory>resources</directory>
+                  <filtering>true</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
           <execution>
             <id>cloudformation</id>
             <phase>generate-resources</phase>
@@ -151,10 +124,6 @@
   <profiles>
     <profile>
       <id>release</id>
-
-<!--      <properties>-->
-<!--        <dashTimestamp></dashTimestamp>-->
-<!--      </properties>-->
 
       <build>
         <plugins>

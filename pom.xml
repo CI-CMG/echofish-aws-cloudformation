@@ -9,13 +9,14 @@
   <version>1.0.0-SNAPSHOT</version>
   <packaging>pom</packaging>
 
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
   <modules>
     <module>echofish-aws-cloudformation</module>
     <module>echofish-aws-e2e-tests</module>
+    <module>echofish-aws-build</module>
   </modules>
-
-
-
-
 
 </project>
