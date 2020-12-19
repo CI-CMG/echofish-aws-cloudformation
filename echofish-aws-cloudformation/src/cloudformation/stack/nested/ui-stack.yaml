@@ -97,7 +97,7 @@ Resources:
       Description: Echofish UI Frontend
       Code:
         S3Bucket: !Ref DeploymentBucketName
-        S3Key: !Sub lambda/echofish-aws-custom-resource-${Version}-lambda.zip
+        S3Key: !Sub lambda/echofish-aws-custom-resource-lambda-${Version}-lambda.zip
       Handler: edu.colorado.cires.cmg.echofish.aws.lambda.resource.DeployUiLambda::handleRequest
       Runtime: java11
       MemorySize: 512

@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: EchoFish Geometry Pipeline
 
 Parameters:
-  MvtGenerationQueueArn:
+  Raw2ZarrQueueArn:
     Type: String
   LogRetentionInDays:
     Type: Number
@@ -11,12 +11,23 @@ Parameters:
     Type: String
   LambdaRolePermissionsBoundary:
     Type: String
-  Version:
+  DynamicStackLambdaVersion:
     Type: String
-  MvtBucketName:
+  Raw2ZarrDockerVersion:
     Type: String
-  MbTilesBucketName:
+  DataSetBucketName:
     Type: String
+  ZarrFileBucketName:
+    Type: String
+  EchoPypeTimeout:
+    Type: Number
+    Default: 120000
+  MaxConcurrentUploadsPerConsumer:
+    Type: Number
+    Default: 8
+  ConcurrentConsumers:
+    Type: Number
+    Default: 8
   QuietPeriodMs:
     Type: Number
   VolumeSizeGB:
@@ -254,8 +265,7 @@ Mappings:
 
 Resources:
 
-
-  DeployGeometryMvtPipelineLambdaRole:
+  DeployRaw2ZarrStackLambdaRole:
     Type: AWS::IAM::Role
     Properties:
       PermissionsBoundary:
@@ -309,22 +319,22 @@ Resources:
                 Action: '*'
 
 
-  DeployGeometryMvtPipelineLambda:
+  DeployRaw2ZarrLambda:
     Type: AWS::Lambda::Function
     Properties:
       Code:
         S3Bucket: !Ref DeploymentBucketName
-        S3Key: !Sub lambda/echofish-aws-dynamic-stack-${Version}-lambda.zip
+        S3Key: !Sub lambda/echofish-aws-dynamic-stack-lambda-${DynamicStackLambdaVersion}-lambda.zip
       Handler: edu.colorado.cires.cmg.echofish.aws.lambda.stack.DeployStackLambda::handleRequest
       Runtime: java11
       MemorySize: 512
       Timeout: 600
-      Role: !GetAtt DeployGeometryMvtPipelineLambdaRole.Arn
+      Role: !GetAtt DeployRaw2ZarrStackLambdaRole.Arn
       Environment:
         Variables:
-          STACK_NAME: !Sub ${AWS::StackName}-ephemeral-geom-pipe
+          STACK_NAME: !Sub ${AWS::StackName}-raw2zarr-ec2
           BUCKET_NAME: !Ref DeploymentBucketName
-          TEMPLATE_KEY: stack/nested/ephemeral-geometry-pipeline.yaml
+          TEMPLATE_KEY: stack/dynamic/raw2zarr-ec2.yaml
           CF_EC2LogGroup: !Ref EC2LogGroup
           CF_EC2InstanceProfile : !Ref EC2InstanceProfile
           CF_ImageId:
@@ -337,18 +347,22 @@ Resources:
                   - Arch
           CF_VolumeSizeGB: !Ref VolumeSizeGB
           CF_InstanceType: !Ref InstanceType
-          CF_XYZTILESBUCKET: !Ref MvtBucketName
-          CF_MBTILESBUCKET: !Ref MbTilesBucketName
-          CF_MBTILESKEY: global.mbtiles
-          CF_SQSARN: !Ref MvtGenerationQueueArn
-          CF_QUIETPERIODMS: !Ref QuietPeriodMs
           CF_DeploymentBucketName: !Ref DeploymentBucketName
+          CF_SQSARN: !Ref Raw2ZarrQueueArn
+          CF_SOURCEBUCKET: !Ref DataSetBucketName
+          CF_TARGETBUCKET: !Ref ZarrFileBucketName
+          CF_ECHOPYPETIMEOUT: !Ref EchoPypeTimeout
+          CF_QUIETPERIODMS: !Ref QuietPeriodMs
+          CF_MAXCONCURRENTUPLOADSPERCONSUMER: !Ref MaxConcurrentUploadsPerConsumer
+          CF_CONCURRENTCONSUMERS: !Ref ConcurrentConsumers
+          CF_Version: !Ref Raw2ZarrDockerVersion
+
 
 
   EC2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/ec2/${AWS::StackName}/mvt-gen
+      LogGroupName: !Sub /aws/ec2/${AWS::StackName}/raw2zarr-ec2
       RetentionInDays: !Ref LogRetentionInDays
 
   EC2Role:
@@ -398,7 +412,7 @@ Resources:
 
 
 Outputs:
-  DeployGeometryMvtPipelineLambdaArn:
-    Value: !GetAtt DeployGeometryMvtPipelineLambda.Arn
-  DeployGeometryMvtPipelineLambdaName:
-    Value: !Ref DeployGeometryMvtPipelineLambda
+  DeployRaw2ZarrLambdaArn:
+    Value: !GetAtt DeployRaw2ZarrLambda.Arn
+  DeployRaw2ZarrLambdaName:
+    Value: !Ref DeployRaw2ZarrLambda

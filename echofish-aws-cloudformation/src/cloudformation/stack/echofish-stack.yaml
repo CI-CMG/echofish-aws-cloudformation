@@ -12,30 +12,6 @@ Parameters:
     Description: An optional permissions boundary to associate with the Lambda role
     Type: String
     Default: ""
-#  Zarr2GeoJsonLambdaVersion:
-#    Description: The version of the Zarr2GeoJson Lambda
-#    Type: String
-#  File2ZarrVersion:
-#    Description: The version of the File2Zarr Lambda
-#    Type: String
-#  CustomResourceLambdaVersion:
-#    Description: The version of the Custom Resource Lambda
-#    Type: String
-#  ZarrAccumulatorLambdaVersion:
-#    Description: The version of the Zarr Accumulator Lambda
-#    Type: String
-#  UiVersion:
-#    Description: The version of the User Interface
-#    Type: String
-#  ApiLambdaVersion:
-#    Description: The version of the API
-#    Type: String
-#  MvtGeneratorLambdaVersion:
-#    Description: The version of the MVT Generator Lambda
-#    Type: String
-#  BucketSnsNotificationLambdaVersion:
-#    Description: The version of the Bucket SNS Notification Lambda
-#    Type: String
   LogRetentionInDays:
     Description: The number of days to keep CloudWatch logs
     Type: Number
@@ -57,18 +33,18 @@ Parameters:
     Type: Number
     MinValue: 256
     Default: 1024
-  File2ZarrLambdaMaxConcurrency:
+  Raw2ZarrLambdaMaxConcurrency:
     Description: The maximum number of concurrent CSV to Zarr requests.
     Type: Number
     MinValue: 1
     Default: 10
-  File2ZarrLambdaTimeout:
+  Raw2ZarrLambdaTimeout:
     Description: The timeout in seconds for the CSV to Zarr lambda
     Type: Number
     MinValue: 10
     MaxValue: 900
     Default: 120
-  File2ZarrLambdaMemorySize:
+  Raw2ZarrLambdaMemorySize:
     Description: The amount of memory for the CSV to Zarr lambda
     Type: Number
     MinValue: 256
@@ -114,6 +90,73 @@ Parameters:
     AllowedValues:
       - 'yes'
       - 'no'
+  Raw2ZarrTerminationQuietPeriodMs:
+    Type: Number
+    Default: 600000
+  Raw2ZarrInstanceType:
+    Type: "String"
+    Default: "t2.large"
+    AllowedValues:
+      - t1.micro
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - m1.small
+      - m1.medium
+      - m1.large
+      - m1.xlarge
+      - m2.xlarge
+      - m2.2xlarge
+      - m2.4xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - c1.medium
+      - c1.xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - g2.2xlarge
+      - g2.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+      - hi1.4xlarge
+      - hs1.8xlarge
+      - cr1.8xlarge
+      - cc2.8xlarge
+      - cg1.4xlarge
+    ConstraintDescription: "must be a valid EC2 instance type."
+  Raw2ZarrVolumeSizeGB:
+    Type: Number
+    MinValue: 1
+    MaxValue: 16384
+    Default: 20
   MvtTerminationQuietPeriodMs:
     Type: Number
     Default: 600000
@@ -121,7 +164,7 @@ Parameters:
     Type: Number
     MinValue: 1
     MaxValue: 16384
-    Default: 512
+    Default: 100
   MvtGenInstanceType:
     Type: "String"
     Default: "t2.large"
@@ -195,23 +238,23 @@ Conditions:
               - @cr.version@
   ZgeoIsRelease:
     Fn::Equals:
-      - @cr.version@
+      - @zgeo.version@
       - Fn::Join:
           - ""
           - Fn::Split:
               - "-SNAPSHOT"
               - @zgeo.version@
-  F2zIsRelease:
+  R2zIsRelease:
     Fn::Equals:
-      - @cr.version@
+      - @r2z.version@
       - Fn::Join:
           - ""
           - Fn::Split:
               - "-SNAPSHOT"
-              - @f2z.version@
+              - @r2z.version@
   ZaIsRelease:
     Fn::Equals:
-      - @cr.version@
+      - @za.version@
       - Fn::Join:
           - ""
           - Fn::Split:
@@ -219,7 +262,7 @@ Conditions:
               - @za.version@
   UiIsRelease:
     Fn::Equals:
-      - @cr.version@
+      - @ui.version@
       - Fn::Join:
           - ""
           - Fn::Split:
@@ -227,7 +270,7 @@ Conditions:
               - @ui.version@
   ApiIsRelease:
     Fn::Equals:
-      - @cr.version@
+      - @api.version@
       - Fn::Join:
           - ""
           - Fn::Split:
@@ -302,42 +345,31 @@ Resources:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
 
-  File2ZarrStack:
+  Raw2ZarrStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       Parameters:
+        Raw2ZarrQueueArn:
+          Fn::GetAtt:
+            - QueueStack
+            - Outputs.Raw2ZarrQueueArn
+        QuietPeriodMs: !Ref Raw2ZarrTerminationQuietPeriodMs
+        InstanceType: !Ref Raw2ZarrInstanceType
+        VolumeSizeGB: !Ref Raw2ZarrVolumeSizeGB
+        LogRetentionInDays: !Ref LogRetentionInDays
         DeploymentBucketName:
           Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
         LambdaRolePermissionsBoundary: !Ref LambdaRolePermissionsBoundary
-        File2ZarrLambdaMaxConcurrency: !Ref File2ZarrLambdaMaxConcurrency
-        File2ZarrLambdaTimeout: !Ref File2ZarrLambdaTimeout
-        File2ZarrLambdaMemorySize: !Ref File2ZarrLambdaMemorySize
+        DynamicStackLambdaVersion: !If [DsIsRelease, @ds.version@, @ds.version@@dashTimestamp@]
+        Raw2ZarrDockerVersion: !If [R2zIsRelease, @r2z.version@, @r2z.version@@dashTimestamp@]
         DataSetBucketName: !Ref DataSetBucketName
-        ZarrAccumulatorReadyTopicArn:
-          Fn::GetAtt:
-            - TopicStack
-            - Outputs.ZarrAccumulatorReadyTopicArn
         ZarrFileBucketName:
           Fn::GetAtt:
             - BucketStack
             - Outputs.ZarrFileBucketName
-        DeadLetterTopicArn:
-          Fn::GetAtt:
-            - TopicStack
-            - Outputs.DeadLetterTopicArn
-        LogRetentionInDays: !Ref LogRetentionInDays
-        Version: !If [F2zIsRelease, @f2z.version@, @f2z.version@@dashTimestamp@]
-        File2ZarrTableArn:
-          Fn::GetAtt:
-            - DynamoStack
-            - Outputs.File2ZarrTableArn
-        File2ZarrTableName:
-          Fn::GetAtt:
-            - DynamoStack
-            - Outputs.File2ZarrTableName
       TemplateURL:
         Fn::Sub:
-          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/file2zarr-stack.yaml
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw2zarr-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
@@ -514,7 +546,8 @@ Resources:
         LogRetentionInDays: !Ref LogRetentionInDays
         DeploymentBucketName:
           Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-        Version: !If [MvtIsRelease, @mvt.version@, @mvt.version@@dashTimestamp@]
+        MvtDockerVersion: !If [MvtIsRelease, @mvt.version@, @mvt.version@@dashTimestamp@]
+        DynamicStackLambdaVersion: !If [DsIsRelease, @ds.version@, @ds.version@@dashTimestamp@]
         MvtBucketName:
           Fn::GetAtt:
             - BucketStack
@@ -528,7 +561,7 @@ Resources:
         QuietPeriodMs: !Ref MvtTerminationQuietPeriodMs
       TemplateURL:
         Fn::Sub:
-          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/geometry-pipeline-stack.yaml
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/mvt-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
@@ -542,10 +575,10 @@ Resources:
         DeploymentBucketName:
           Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
         LambdaRolePermissionsBoundary: !Ref LambdaRolePermissionsBoundary
-        File2ZarrTopicArn:
+        Raw2ZarrTopicArn:
           Fn::GetAtt:
             - TopicStack
-            - Outputs.File2ZarrTopicArn
+            - Outputs.Raw2ZarrTopicArn
         GeoJsonLandedTopicArn:
           Fn::GetAtt:
             - TopicStack
@@ -574,14 +607,14 @@ Resources:
           Fn::GetAtt:
             - GeometryPipelineStack
             - Outputs.DeployGeometryMvtPipelineLambdaName
-        File2ZarrLambdaArn:
+        DeployRaw2ZarrLambdaArn:
           Fn::GetAtt:
-            - File2ZarrStack
-            - Outputs.File2ZarrLambdaArn
-        File2ZarrLambdaName:
+            - Raw2ZarrStack
+            - Outputs.DeployRaw2ZarrLambdaArn
+        DeployRaw2ZarrLambdaName:
           Fn::GetAtt:
-            - File2ZarrStack
-            - Outputs.File2ZarrLambdaName
+            - Raw2ZarrStack
+            - Outputs.DeployRaw2ZarrLambdaName
         DeadLetterTopicArn:
           Fn::GetAtt:
             - TopicStack

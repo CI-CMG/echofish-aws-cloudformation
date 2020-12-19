@@ -9,7 +9,7 @@ Parameters:
     Type: String
   LambdaRolePermissionsBoundary:
     Type: String
-  File2ZarrTopicArn:
+  Raw2ZarrTopicArn:
     Type: String
   GeoJsonLandedTopicArn:
     Type: String
@@ -25,9 +25,9 @@ Parameters:
     Type: String
   DeployGeometryMvtPipelineLambdaName:
     Type: String
-  File2ZarrLambdaArn:
+  DeployRaw2ZarrLambdaArn:
     Type: String
-  File2ZarrLambdaName:
+  DeployRaw2ZarrLambdaName:
     Type: String
   DeadLetterTopicArn:
     Type: String
@@ -96,7 +96,7 @@ Resources:
     Properties:
       Code:
         S3Bucket: !Ref DeploymentBucketName
-        S3Key: !Sub lambda/echofish-aws-custom-resource-${BucketSnsNotificationLambdaVersion}-lambda.zip
+        S3Key: !Sub lambda/echofish-aws-custom-resource-lambda-${BucketSnsNotificationLambdaVersion}-lambda.zip
       Handler: edu.colorado.cires.cmg.echofish.aws.lambda.resource.BucketSnsNotificationLambda::handleRequest
       Runtime: java11
       MemorySize: 512
@@ -214,16 +214,16 @@ Resources:
       SourceArn: !Ref GeoJsonLandedTopicArn
 
 
-  File2ZarrTopicPolicy:
+  Raw2ZarrTopicPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
       Topics:
-        - !Ref File2ZarrTopicArn
+        - !Ref Raw2ZarrTopicArn
       PolicyDocument:
         Version: 2012-10-17
         Id:
           Fn::Sub:
-            - File2ZarrTopicPolicy-${StackUuid}
+            - Raw2ZarrTopicPolicy-${StackUuid}
             - StackUuid:
                 Fn::Select:
                   - "2"
@@ -232,7 +232,7 @@ Resources:
                       - !Ref AWS::StackId
         Statement:
           - Sid: SubscribeToTopic
-            Resource: !Ref File2ZarrTopicArn
+            Resource: !Ref Raw2ZarrTopicArn
             Effect: Allow
             Principal:
               Service:
@@ -241,10 +241,10 @@ Resources:
               - sns:Subscribe
             Condition:
               ArnEquals:
-                aws:SourceArn: !Ref File2ZarrLambdaArn
+                aws:SourceArn: !Ref DeployRaw2ZarrLambdaArn
 # TODO set publish from API lambda
 #          - Sid: PublishToTopic
-#            Resource: !Ref File2ZarrTopicArn
+#            Resource: !Ref Raw2ZarrTopicArn
 #            Effect: Allow
 #            Principal:
 #              Service:
@@ -255,20 +255,20 @@ Resources:
 #              ArnEquals:
 #                aws:SourceArn: !Ref AMStatGeometryLambdaArn
 
-  SubscribeFile2ZarrTopicFile2ZarrLambda:
+  SubscribeRaw2ZarrTopicRaw2ZarrLambda:
     Type: AWS::SNS::Subscription
     Properties:
       Protocol: lambda
-      Endpoint: !Ref File2ZarrLambdaArn
-      TopicArn: !Ref File2ZarrTopicArn
+      Endpoint: !Ref DeployRaw2ZarrLambdaArn
+      TopicArn: !Ref Raw2ZarrTopicArn
 
   TriggerGeometryDoneEnrichmentLambda:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !Ref File2ZarrLambdaName
+      FunctionName: !Ref DeployRaw2ZarrLambdaName
       Principal: sns.amazonaws.com
       Action: lambda:InvokeFunction
-      SourceArn: !Ref File2ZarrTopicArn
+      SourceArn: !Ref Raw2ZarrTopicArn
 
 
 
@@ -310,7 +310,7 @@ Resources:
               - sns:Publish
             Condition:
               ArnEquals:
-                aws:SourceArn: !Ref File2ZarrLambdaArn
+                aws:SourceArn: !Ref DeployRaw2ZarrLambdaArn
 
   SubscribeZarrAccumulatorReadyTopicZarrAccumulatorLambda:
     Type: AWS::SNS::Subscription
@@ -426,7 +426,7 @@ Resources:
             Condition:
               ArnEquals:
                 aws:SourceArn:
-                  - !Ref File2ZarrLambdaArn
+                  - !Ref DeployRaw2ZarrLambdaArn
                   - !Ref ZarrAccumulatorLambdaArn
 
 

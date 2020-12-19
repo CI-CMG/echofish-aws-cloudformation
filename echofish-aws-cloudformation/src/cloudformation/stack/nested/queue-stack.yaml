@@ -7,8 +7,15 @@ Resources:
   MvtGenerationQueue:
     Type: AWS::SQS::Queue
 
+  Raw2ZarrQueue:
+    Type: AWS::SQS::Queue
+
 Outputs:
   MvtGenerationQueueUrl:
     Value: !Ref MvtGenerationQueue
   MvtGenerationQueueArn:
     Value: !GetAtt MvtGenerationQueue.Arn
+  Raw2ZarrQueueUrl:
+    Value: !Ref Raw2ZarrQueue
+  Raw2ZarrQueueArn:
+    Value: !GetAtt Raw2ZarrQueue.Arn

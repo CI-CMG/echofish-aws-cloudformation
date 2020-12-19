@@ -27,7 +27,7 @@ Instructions for adding or updating a new deployment resource:
 
   <properties>
 
-    <zgeo.version>2.0.0</zgeo.version>
+    <zgeo.version>1.0.0-SNAPSHOT</zgeo.version>
     <r2z.version>1.0.0-SNAPSHOT</r2z.version>
     <cr.version>1.0.0-SNAPSHOT</cr.version>
     <za.version>1.0.0-SNAPSHOT</za.version>

@@ -6,11 +6,11 @@ Parameters:
     Type: String
   LambdaRolePermissionsBoundary:
     Type: String
-  File2ZarrLambdaMaxConcurrency:
+  Raw2ZarrLambdaMaxConcurrency:
     Type: Number
-  File2ZarrLambdaTimeout:
+  Raw2ZarrLambdaTimeout:
     Type: Number
-  File2ZarrLambdaMemorySize:
+  Raw2ZarrLambdaMemorySize:
     Type: Number
   DataSetBucketName:
     Type: String
@@ -24,9 +24,9 @@ Parameters:
     Type: String
   ZarrAccumulatorReadyTopicArn:
     Type: String
-  File2ZarrTableArn:
+  Raw2ZarrTableArn:
     Type: String
-  File2ZarrTableName:
+  Raw2ZarrTableName:
     Type: String
 
 
@@ -39,7 +39,7 @@ Conditions:
 
 Resources:
 
-  File2ZarrLambdaRole:
+  Raw2ZarrLambdaRole:
     Type: AWS::IAM::Role
     Properties:
       PermissionsBoundary:
@@ -97,7 +97,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Resource:
-                  - !Ref File2ZarrTableArn
+                  - !Ref Raw2ZarrTableArn
                 Action:
                   - dynamodb:GetItem
                   - dynamodb:UpdateItem
@@ -106,35 +106,35 @@ Resources:
                   - dynamodb:Scan
                   - dynamodb:DeleteItem
 
-  File2ZarrLambda:
+  Raw2ZarrLambda:
     Type: AWS::Lambda::Function
     Properties:
       Code:
         S3Bucket: !Ref DeploymentBucketName
-        S3Key: !Sub lambda/echofish-aws-file2zarr-lambda-${Version}-lambda.zip
-      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.file2zarr.File2ZarrLambda::handleRequest
+        S3Key: !Sub lambda/echofish-aws-raw2zarr-${Version}-docker.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.raw2zarr.Raw2ZarrLambda::handleRequest
       Runtime: java11
-      MemorySize: !Ref File2ZarrLambdaMemorySize
-      Timeout: !Ref File2ZarrLambdaTimeout
-      ReservedConcurrentExecutions: !Ref File2ZarrLambdaMaxConcurrency
-      Role: !GetAtt File2ZarrLambdaRole.Arn
+      MemorySize: !Ref Raw2ZarrLambdaMemorySize
+      Timeout: !Ref Raw2ZarrLambdaTimeout
+      ReservedConcurrentExecutions: !Ref Raw2ZarrLambdaMaxConcurrency
+      Role: !GetAtt Raw2ZarrLambdaRole.Arn
       Environment:
         Variables:
           SOURCE_BUCKET_NAME: !Ref DataSetBucketName
           ZARR_FILE_BUCKET_NAME: !Ref ZarrFileBucketName
           ZARR_ACCUMULATOR_READY_TOPIC_ARN: !Ref ZarrAccumulatorReadyTopicArn
-          FILE_2_ZARR_TABLE: !Ref File2ZarrTableName
+          FILE_2_ZARR_TABLE: !Ref Raw2ZarrTableName
 
-  File2ZarrLambdaLogGroup:
+  Raw2ZarrLambdaLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${File2ZarrLambda}
+      LogGroupName: !Sub /aws/lambda/${Raw2ZarrLambda}
       RetentionInDays: !Ref LogRetentionInDays
 
-  File2ZarrLambdaEvent:
+  Raw2ZarrLambdaEvent:
     Type: AWS::Lambda::EventInvokeConfig
     Properties:
-      FunctionName: !Ref File2ZarrLambda
+      FunctionName: !Ref Raw2ZarrLambda
       Qualifier: $LATEST
       MaximumRetryAttempts: 0
       DestinationConfig:
@@ -143,10 +143,10 @@ Resources:
 
 
 Outputs:
-  File2ZarrLambdaArn:
-    Value: !GetAtt File2ZarrLambda.Arn
-  File2ZarrLambdaName:
-    Value: !Ref File2ZarrLambda
+  Raw2ZarrLambdaArn:
+    Value: !GetAtt Raw2ZarrLambda.Arn
+  Raw2ZarrLambdaName:
+    Value: !Ref Raw2ZarrLambda
 
 
 

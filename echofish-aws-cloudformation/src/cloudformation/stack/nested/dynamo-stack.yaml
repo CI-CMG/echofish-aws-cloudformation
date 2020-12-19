@@ -16,11 +16,11 @@ Conditions:
 
 Resources:
 
-  File2ZarrTable:
+  Raw2ZarrTable:
     Type: AWS::DynamoDB::Table
     DeletionPolicy: Delete
     Properties:
-      TableName: !Sub ${StackPrefix}-File2Zarr
+      TableName: !Sub ${StackPrefix}-Raw2Zarr
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: job
@@ -53,7 +53,7 @@ Outputs:
     Value: !Ref JobLockTable
   JobLockTableArn:
     Value: !GetAtt JobLockTable.Arn
-  File2ZarrTableName:
-    Value: !Ref File2ZarrTable
-  File2ZarrTableArn:
-    Value: !GetAtt File2ZarrTable.Arn
+  Raw2ZarrTableName:
+    Value: !Ref Raw2ZarrTable
+  Raw2ZarrTableArn:
+    Value: !GetAtt Raw2ZarrTable.Arn

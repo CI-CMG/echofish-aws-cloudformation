@@ -130,7 +130,7 @@ Resources:
       Description: Empty Bucket
       Code:
         S3Bucket: !Ref DeploymentBucketName
-        S3Key: !Sub lambda/echofish-aws-custom-resource-${CustomResourceLambdaVersion}-lambda.zip
+        S3Key: !Sub lambda/echofish-aws-custom-resource-lambda-${CustomResourceLambdaVersion}-lambda.zip
       Handler: edu.colorado.cires.cmg.echofish.aws.lambda.resource.EmptyBucketLambda::handleRequest
       Runtime: java11
       MemorySize: 256

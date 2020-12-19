@@ -2,6 +2,8 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: EchoFish MVT Generator
 
 Parameters:
+  Version:
+    Type: String
   EC2LogGroup:
     Type: String
   EC2InstanceProfile:
@@ -151,7 +153,7 @@ Resources:
                 ECHOFISH_SQSARN: !Ref SQSARN
                 ECHOFISH_STACKNAME: !Ref AWS::StackName
                 ECHOFISH_QUIETPERIODMS: !Ref QUIETPERIODMS
-              command: 'set -ex && aws s3 cp s3://$ECHOFISH_DEPLOYMENTBUCKET/docker/echofish-aws-mvtgen-@artifact.baseVersion@@dashTimestamp@-docker.tar.gz / && docker load -i /echofish-aws-mvtgen-@artifact.baseVersion@@dashTimestamp@-docker.tar.gz && docker run -d --name mvtgen -e ECHOFISH_STACKNAME -e ECHOFISH_QUIETPERIODMS -e ECHOFISH_XYZTILESBUCKET -e ECHOFISH_MBTILESBUCKET -e ECHOFISH_MBTILESKEY -e ECHOFISH_SQSARN -v /mvtgen/log:/echofish-aws-mvtgen-@project.version@/log cirescmg/echofish-aws-mvtgen:@project.version@ && while [ "`docker inspect -f {{.State.Health.Status}} mvtgen`" != "healthy" ]; do     sleep 2; done'
+              command: !Sub 'set -ex && aws s3 cp s3://$ECHOFISH_DEPLOYMENTBUCKET/docker/echofish-aws-mvtgen-${Version}-docker.tar.gz / && docker load -i /echofish-aws-mvtgen-${Version}-docker.tar.gz && docker run -d --name mvtgen -e ECHOFISH_STACKNAME -e ECHOFISH_QUIETPERIODMS -e ECHOFISH_XYZTILESBUCKET -e ECHOFISH_MBTILESBUCKET -e ECHOFISH_MBTILESKEY -e ECHOFISH_SQSARN -v /mvtgen/log:/echofish-aws-mvtgen-${Version}/log cirescmg/echofish-aws-mvtgen:${Version} && while [ "`docker inspect -f {{.State.Health.Status}} mvtgen`" != "healthy" ]; do     sleep 2; done'
     CreationPolicy:
       ResourceSignal:
         Timeout: PT10M

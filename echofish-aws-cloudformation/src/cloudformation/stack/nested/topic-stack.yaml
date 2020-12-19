@@ -7,7 +7,7 @@ Resources:
   DeadLetterTopic:
     Type: AWS::SNS::Topic
 
-  File2ZarrTopic:
+  Raw2ZarrTopic:
     Type: AWS::SNS::Topic
 
   GeoJsonLandedTopic:
@@ -24,8 +24,8 @@ Resources:
 
 
 Outputs:
-  File2ZarrTopicArn:
-    Value: !Ref File2ZarrTopic
+  Raw2ZarrTopicArn:
+    Value: !Ref Raw2ZarrTopic
   GeoJsonLandedTopicArn:
     Value: !Ref GeoJsonLandedTopic
   ZarrAccumulatorTrackingTopicArn:
