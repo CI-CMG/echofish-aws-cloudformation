@@ -25,34 +25,13 @@ Resources:
       AttributeDefinitions:
         - AttributeName: job
           AttributeType: S
-        - AttributeName: file
-          AttributeType: S
       KeySchema:
         - AttributeName: job
           KeyType: HASH
-        - AttributeName: file
-          KeyType: RANGE
 
-
-  JobLockTable:
-    Type: AWS::DynamoDB::Table
-    DeletionPolicy: Delete
-    Properties:
-      TableName: !Sub ${StackPrefix}-JobLock
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: job
-          AttributeType: S
-      KeySchema:
-        - AttributeName: job
-          KeyType: HASH
 
 
 Outputs:
-  JobLockTableName:
-    Value: !Ref JobLockTable
-  JobLockTableArn:
-    Value: !GetAtt JobLockTable.Arn
   Raw2ZarrTableName:
     Value: !Ref Raw2ZarrTable
   Raw2ZarrTableArn:
