@@ -367,6 +367,14 @@ Resources:
           Fn::GetAtt:
             - BucketStack
             - Outputs.ZarrFileBucketName
+        ZarrAccumulatorReadyTopicArn:
+          Fn::GetAtt:
+            - TopicStack
+            - Outputs.ZarrAccumulatorReadyTopicArn
+        Raw2ZarrTableName:
+          Fn::GetAtt:
+            - DynamoStack
+            - Outputs.Raw2ZarrTableName
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw2zarr-stack.yaml

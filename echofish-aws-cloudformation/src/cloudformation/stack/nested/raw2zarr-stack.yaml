@@ -30,6 +30,10 @@ Parameters:
     Default: 8
   QuietPeriodMs:
     Type: Number
+  ZarrAccumulatorReadyTopicArn:
+    Type: String
+  Raw2ZarrTableName:
+    Type: String
   VolumeSizeGB:
     Type: Number
   InstanceType:
@@ -355,6 +359,8 @@ Resources:
           CF_QUIETPERIODMS: !Ref QuietPeriodMs
           CF_MAXCONCURRENTUPLOADSPERCONSUMER: !Ref MaxConcurrentUploadsPerConsumer
           CF_CONCURRENTCONSUMERS: !Ref ConcurrentConsumers
+          CF_RAW2ZARRTABLENAME: !Ref Raw2ZarrTableName
+          CF_ZARRACCUMULATORTOPICARN: !Ref ZarrAccumulatorReadyTopicArn
           CF_Version: !Ref Raw2ZarrDockerVersion
 
 

@@ -30,6 +30,10 @@ Parameters:
     Type: String
   CONCURRENTCONSUMERS:
     Type: String
+  RAW2ZARRTABLENAME:
+    Type: String
+  ZARRACCUMULATORTOPICARN:
+    Type: String
   DeploymentBucketName:
     Type: String
 
@@ -143,6 +147,8 @@ Resources:
                   -e ECHOFISH_STACKNAME \
                   -e ECHOFISH_MAXCONCURRENTUPLOADSPERCONSUMER \
                   -e ECHOFISH_CONCURRENTCONSUMERS \
+                  -e ECHOFISH_RAW2ZARRTABLENAME \
+                  -e ECHOFISH_ZARRACCUMULATORTOPICARN \
                   -v /application/log:/application/log \
                   cirescmg/echofish-aws-raw2zarr:${Version}
                 while [ ${docker inspect -f {{.State.Health.Status}} mvtgen} != healthy ]
@@ -187,6 +193,8 @@ Resources:
                 ECHOFISH_QUIETPERIODMS: !Ref QUIETPERIODMS
                 ECHOFISH_MAXCONCURRENTUPLOADSPERCONSUMER: !Ref MAXCONCURRENTUPLOADSPERCONSUMER
                 ECHOFISH_CONCURRENTCONSUMERS: !Ref CONCURRENTCONSUMERS
+                ECHOFISH_RAW2ZARRTABLENAME: !Ref RAW2ZARRTABLENAME
+                ECHOFISH_ZARRACCUMULATORTOPICARN: !Ref ZARRACCUMULATORTOPICARN
               command: /run.sh
     CreationPolicy:
       ResourceSignal:
