@@ -99,8 +99,8 @@ Resources:
       Code:
         S3Bucket: !Ref DeploymentBucketName
         S3Key: !Sub lambda/echofish-aws-zarr-accumulator-lambda-${Version}-lambda.zip
-      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.zarraccumulator.ZarrAccumulatorLambda::handleRequest
-      Runtime: java11
+      Handler: echofish_zarr_accumulator.zarr_accumulator_lambda.lambda_handler
+      Runtime: python3.8
       MemorySize: !Ref ZarrAccumulatorLambdaMemorySize
       Timeout: !Ref ZarrAccumulatorLambdaTimeout
       ReservedConcurrentExecutions: !Ref ZarrAccumulatorLambdaMaxConcurrency
