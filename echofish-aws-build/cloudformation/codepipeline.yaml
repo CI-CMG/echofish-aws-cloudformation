@@ -297,6 +297,7 @@ Resources:
               OutputArtifacts: [ ]
               Configuration:
                 ProjectName: !Ref CodeBuildDeploy
+                PrimarySource: SourceOutput
               RunOrder: 1
       ArtifactStore:
         Type: S3
