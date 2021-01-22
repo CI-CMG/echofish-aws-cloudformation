@@ -142,7 +142,7 @@
             <executions>
               <execution>
                 <id>update-stack</id>
-                <phase>validate</phase>
+                <phase>compile</phase>
                 <goals>
                   <goal>java</goal>
                 </goals>
