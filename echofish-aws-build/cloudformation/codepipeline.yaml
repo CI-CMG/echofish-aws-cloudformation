@@ -154,6 +154,28 @@ Resources:
                 Action: '*'
                 Resource: '*'
 
+  CodeBuildDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codebuild.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: role
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: '*'
+                Resource: '*'
+
   CodeBuild:
     Type: AWS::CodeBuild::Project
     Properties:
@@ -168,6 +190,30 @@ Resources:
         PrivilegedMode: true
       Source:
         Type: CODEPIPELINE
+      TimeoutInMinutes: 20
+
+  CodeBuildDeploy:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: echofish-aws-cloudformation_@git.branch@-deploy
+      ServiceRole: !GetAtt CodeBuildDeployRole.Arn
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/standard:3.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: DEPLOYMENT_STACK_NAME
+            Type: PLAINTEXT
+            Value: echofish-dev-master-deployment
+          - Name: STACK_NAME
+            Type: PLAINTEXT
+            Value: echofish-dev-master
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: buildspec-update-stack.yaml
       TimeoutInMinutes: 20
 
   CodePipeline:
@@ -192,6 +238,22 @@ Resources:
                   Fn::ImportValue: echofish-build-GitHubCodeStarConnectionArn
                 FullRepositoryId: @git.remote.origin.url.suffix@
                 BranchName: @git.branch@
+                OutputArtifactFormat: "CODE_ZIP"
+              RunOrder: 1
+            - Name: StackParameters
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Version: 1
+                Provider: CodeStarSourceConnection
+              InputArtifacts: [ ]
+              OutputArtifacts:
+                - Name: StackParameters
+              Configuration:
+                ConnectionArn:
+                  Fn::ImportValue: echofish-build-GitHubCodeStarConnectionArn
+                FullRepositoryId: CI-CMG/echofish-aws-parameters
+                BranchName: master
                 OutputArtifactFormat: "CODE_ZIP"
               RunOrder: 1
         - Name: Build
@@ -221,6 +283,21 @@ Resources:
                   Fn::ImportValue: echofish-build-ActionLambdaName
                 UserParameters: @project.groupId@:echofish-aws-cloudformation:@project.version@
               RunOrder: 2
+        - Name: Deploy
+          Actions:
+            - Name: BuildAction
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Version: 1
+                Provider: CodeBuild
+              InputArtifacts:
+                - Name: SourceOutput
+                - Name: StackParameters
+              OutputArtifacts: [ ]
+              Configuration:
+                ProjectName: !Ref CodeBuildDeploy
+              RunOrder: 1
       ArtifactStore:
         Type: S3
         Location:
