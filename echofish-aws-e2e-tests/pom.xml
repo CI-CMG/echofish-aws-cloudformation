@@ -142,7 +142,7 @@
             <executions>
               <execution>
                 <id>update-stack</id>
-                <phase>compile</phase>
+                <phase>install</phase>
                 <goals>
                   <goal>java</goal>
                 </goals>
