@@ -7,4 +7,4 @@ phases:
   build:
     commands:
       - ls $CODEBUILD_SRC_DIR_StackParameters
-      - mvn -B -Dstack.name=$STACK_NAME -Ddeployment.stack.name=$DEPLOYMENT_STACK_NAME -Dstack.params="$CODEBUILD_SRC_DIR_StackParameters/echofish-parameters.json" -Ddeployment.params="$CODEBUILD_SRC_DIR_StackParameters/deployment-parameters.json" validate
+      - mvn -B -Dstack.name=$STACK_NAME -Ddeployment.stack.name=$DEPLOYMENT_STACK_NAME -Dstack.params="$CODEBUILD_SRC_DIR_StackParameters/echofish-parameters.json" -Ddeployment.params="$CODEBUILD_SRC_DIR_StackParameters/deployment-parameters.json" install validate
