@@ -32,8 +32,6 @@ Mappings:
       Value: echofish-zarr-store
     GeoHashBucket:
       Value: echofish-geohash
-    WcImageTileBucket:
-      Value: echofish-wc-image-tile
     UiBucket:
       Value: echofish-ui
     GeoJsonBucket:
@@ -91,9 +89,6 @@ Resources:
                      - Suffix: !FindInMap [BucketNameMap, ZarrStoreBucket, Value]
                  - Fn::Sub:
                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
-                     - Suffix: !FindInMap [BucketNameMap, WcImageTileBucket, Value]
-                 - Fn::Sub:
-                     - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
                      - Suffix: !FindInMap [BucketNameMap, GeoJsonBucket, Value]
                  - Fn::Sub:
                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
@@ -111,9 +106,6 @@ Resources:
                   - Fn::Sub:
                       - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
                       - Suffix: !FindInMap [BucketNameMap, ZarrStoreBucket, Value]
-                  - Fn::Sub:
-                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
-                      - Suffix: !FindInMap [BucketNameMap, WcImageTileBucket, Value]
                   - Fn::Sub:
                       - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
                       - Suffix: !FindInMap [BucketNameMap, GeoJsonBucket, Value]
@@ -296,35 +288,6 @@ Resources:
                   - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
   #######################################################
 
-
-  ############################### WcImageTileBucket ########################
-  WcImageTileBucketProd:
-    Type: AWS::S3::Bucket
-    Condition: IsProduction
-    DeletionPolicy: Retain
-    Properties:
-      BucketName:
-        Fn::Sub:
-          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
-          - Suffix: !FindInMap [BucketNameMap, WcImageTileBucket, Value]
-
-  WcImageTileBucketDev:
-    Type: AWS::S3::Bucket
-    Condition: IsDev
-    DeletionPolicy: Delete
-    Properties:
-      BucketName:
-        Fn::Sub:
-          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
-          - Suffix: !FindInMap [BucketNameMap, WcImageTileBucket, Value]
-
-  WcImageTileBucketDrain:
-    Type: Custom::WcImageTileBucketDrain
-    Condition: IsDev
-    Properties:
-      ServiceToken: !GetAtt BucketDrainLambda.Arn
-      bucketName: !Ref WcImageTileBucketDev
-  #######################################################
 
   ############################### UiBucket ########################
   UiBucket:
