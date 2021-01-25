@@ -494,6 +494,14 @@ Resources:
           Fn::GetAtt:
             - BucketStack
             - Outputs.MvtBucketBaseUrl
+        GeoHashBaseUrl:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.GeoHashBucketBaseUrl
+        ZarrBaseUrl:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.ZarrStoreBucketBaseUrl
 #        OAuthClientId:
 #          Fn::GetAtt:
 #            - CognitoStack

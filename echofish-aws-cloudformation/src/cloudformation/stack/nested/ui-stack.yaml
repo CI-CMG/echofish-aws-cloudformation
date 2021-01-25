@@ -16,6 +16,10 @@ Parameters:
     Type: String
   MvtBaseUrl:
     Type: String
+  ZarrBaseUrl:
+    Type: String
+  GeoHashBaseUrl:
+    Type: String
 #  OAuthClientId:
 #    Type: String
   StackPrefix:
@@ -87,6 +91,8 @@ Resources:
       artifactKey: !Sub ui/echofish-aws-ui-${Version}-zip.zip
       apiBaseUrl: !Ref RestApiUrl
       mvtBaseUrl: !Ref MvtBaseUrl
+      zarrBaseUrl: !Ref ZarrBaseUrl
+      geoHashBaseUrl: !Ref GeoHashBaseUrl
 #      tokenBaseUrl: !Ref TokenProviderUrl
 #      clientId: !Ref OAuthClientId
       stackPrefix: !Ref StackPrefix
