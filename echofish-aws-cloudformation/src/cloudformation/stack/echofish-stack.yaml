@@ -65,22 +65,50 @@ Parameters:
     Type: Number
     MinValue: 256
     Default: 1024
-  Zarr2GeoJsonLambdaMaxConcurrency:
-    Description: The maximum number of concurrent Zarr to GeoJSON requests.
-    Type: Number
-    MinValue: 1
-    Default: 4
-  Zarr2GeoJsonLambdaTimeout:
-    Description: The timeout in seconds for the Zarr to GeoJSON lambda
+  Zarr2MvtLambdaTimeout:
+    Description: The timeout in seconds for the Zarr to MVT lambda
     Type: Number
     MinValue: 10
     MaxValue: 900
-    Default: 600
-  Zarr2GeoJsonLambdaMemorySize:
-    Description: The amount of memory for the Zarr to GeoJSON lambda
+    Default: 900
+  Zarr2MvtLambdaMemorySize:
+    Description: The amount of memory for the Zarr to MVT lambda
     Type: Number
     MinValue: 256
     Default: 2048
+  MvtTracklineSplitMs:
+    Description: The minimum milliseconds to split a trackline
+    Type: Number
+    MinValue: 0
+    Default: 3600000
+  MvtBatchSize:
+    Description: The maximum number of points to keep in memory when processing MVTs
+    Type: Number
+    MinValue: 10
+    Default: 10000
+  MvtTracklinePrecision:
+    Description: The number of decimal points allowed when calculating MVTs
+    Type: Number
+    MinValue: 1
+    Default: 5
+  MvtMaxZoomLevel:
+    Description: The maximum zoom level that MVTs are generated for
+    Type: Number
+    MinValue: 5
+    Default: 8
+  MvtTracklineMinSimplificationTolerance:
+    Description: The minimum simplification tolerance when generating MVTs
+    Type: Number
+    Default: 0.00001
+  MvtTracklineMaxSimplificationTolerance:
+    Description: The maximum simplification tolerance when generating MVTs
+    Type: Number
+    Default: 0.01
+  MvtUploadBuffers:
+    Description: The maximum sets of batches to keep in memory when uploading MVTs
+    Type: Number
+    MinValue: 1
+    Default: 2
 #  UiBucketName:
 #    Type: String
   DeployAdminResources:
@@ -415,41 +443,43 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
-  Zarr2GeoJsonStack:
+  Zarr2MvtStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       Parameters:
+        MvtTracklineSplitMs: !Ref MvtTracklineSplitMs
+        MvtBatchSize: !Ref MvtBatchSize
+        MvtTracklinePrecision: !Ref MvtTracklinePrecision
+        MvtMaxZoomLevel: !Ref MvtMaxZoomLevel
+        MvtTracklineMinSimplificationTolerance: !Ref MvtTracklineMinSimplificationTolerance
+        MvtTracklineMaxSimplificationTolerance: !Ref MvtTracklineMaxSimplificationTolerance
+        MvtUploadBuffers: !Ref MvtUploadBuffers
         DeploymentBucketName:
           Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
         LambdaRolePermissionsBoundary: !Ref LambdaRolePermissionsBoundary
-        Zarr2GeoJsonLambdaMaxConcurrency: !Ref Zarr2GeoJsonLambdaMaxConcurrency
-        Zarr2GeoJsonLambdaTimeout: !Ref Zarr2GeoJsonLambdaTimeout
-        Zarr2GeoJsonLambdaMemorySize: !Ref Zarr2GeoJsonLambdaMemorySize
+        Zarr2MvtLambdaTimeout: !Ref Zarr2MvtLambdaTimeout
+        Zarr2MvtLambdaMemorySize: !Ref Zarr2MvtLambdaMemorySize
         ZarrStoreBucketName:
           Fn::GetAtt:
             - BucketStack
             - Outputs.ZarrStoreBucketName
-        GeoJsonBucketName:
+        MvtBucketName:
           Fn::GetAtt:
             - BucketStack
-            - Outputs.GeoJsonBucketName
+            - Outputs.MvtBucketName
         LogRetentionInDays: !Ref LogRetentionInDays
         DeadLetterTopicArn:
           Fn::GetAtt:
             - TopicStack
             - Outputs.DeadLetterTopicArn
         Version: !If [ZgeoIsRelease, @zgeo.version@, @zgeo.version@@dashTimestamp@]
-        ZarrAccumulatorDoneTopicArn:
+        MvtDoneTopicArn:
           Fn::GetAtt:
             - TopicStack
-            - Outputs.ZarrAccumulatorDoneTopicArn
-        GeoJsonLandedTopicArn:
-          Fn::GetAtt:
-            - TopicStack
-            - Outputs.GeoJsonLandedTopicArn
+            - Outputs.MvtDoneTopicArn
       TemplateURL:
         Fn::Sub:
-          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2geojson-stack.yaml
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2mvt-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
@@ -651,10 +681,10 @@ Resources:
           Fn::GetAtt:
             - ZarrAccumulatorStack
             - Outputs.ZarrAccumulatorLambdaName
-        Zarr2GeoJsonLambdaArn:
+        Zarr2CruiseMvtLambdaArn:
           Fn::GetAtt:
-            - Zarr2GeoJsonStack
-            - Outputs.Zarr2GeoJsonLambdaArn
+            - Zarr2MvtStack
+            - Outputs.Zarr2CruiseMvtLambdaArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/topic-subscription-stack.yaml

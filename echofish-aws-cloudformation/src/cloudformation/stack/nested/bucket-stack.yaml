@@ -34,8 +34,8 @@ Mappings:
       Value: echofish-geohash
     UiBucket:
       Value: echofish-ui
-    GeoJsonBucket:
-      Value: echofish-geojson
+    CruiseMvtBucket:
+      Value: echofish-cruise-mvt
     MvtBucket:
       Value: echofish-mvt
     MbTilesBucket:
@@ -300,23 +300,6 @@ Resources:
           - Suffix: !FindInMap [BucketNameMap, UiBucket, Value]
   #######################################################
 
-  ############################### GeoJsonBucket ########################
-  GeoJsonBucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Delete
-    Properties:
-      BucketName:
-        Fn::Sub:
-          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
-          - Suffix: !FindInMap [BucketNameMap, GeoJsonBucket, Value]
-
-  GeoJsonBucketDrain:
-    Type: Custom::GeoJsonBucketDrain
-    Properties:
-      ServiceToken: !GetAtt BucketDrainLambda.Arn
-      bucketName: !Ref GeoJsonBucket
-  #######################################################
-
   ############################### MvtBucket ########################
   MvtBucketProd:
     Type: AWS::S3::Bucket
@@ -422,10 +405,6 @@ Outputs:
     Value: !GetAtt UiBucket.Arn
   UiBucketName:
     Value: !Ref UiBucket
-  GeoJsonBucketArn:
-    Value: !GetAtt GeoJsonBucket.Arn
-  GeoJsonBucketName:
-    Value: !Ref GeoJsonBucket
   MvtBucketArn:
     Value: !If [IsProduction, !GetAtt MvtBucketProd.Arn, !GetAtt MvtBucketDev.Arn]
   MvtBucketName:

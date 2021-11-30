@@ -10,9 +10,6 @@ Resources:
   Raw2ZarrTopic:
     Type: AWS::SNS::Topic
 
-  GeoJsonLandedTopic:
-    Type: AWS::SNS::Topic
-
   ZarrAccumulatorTrackingTopic:
     Type: AWS::SNS::Topic
 
@@ -26,8 +23,6 @@ Resources:
 Outputs:
   Raw2ZarrTopicArn:
     Value: !Ref Raw2ZarrTopic
-  GeoJsonLandedTopicArn:
-    Value: !Ref GeoJsonLandedTopic
   ZarrAccumulatorTrackingTopicArn:
     Value: !Ref ZarrAccumulatorTrackingTopic
   ZarrAccumulatorDoneTopicArn:
