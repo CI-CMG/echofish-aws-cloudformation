@@ -57,7 +57,8 @@ public final class OperationUtils {
         stackContext.getDeploymentBucketName(),
         repoBucket,
         csvPath,
-        localResources);
+        localResources,
+        Paths.get(cfBaseDir));
 
     if (!cf.stackExists(stackContext.getStackName())) {
       createStack(cf, stackContext, stackParameters);
@@ -119,7 +120,8 @@ public final class OperationUtils {
       String bucketName,
       String repoBucket,
       Path csvPath,
-      Set<String> localResources
+      Set<String> localResources,
+      Path cfBaseDir
       ) {
 
     emptyBucket(s3, bucketName);
@@ -128,7 +130,7 @@ public final class OperationUtils {
 
     s3.uploadDirectoryToBucket(bundleDir, bucketName);
 
-    S3ResourceCopier copier = new S3ResourceCopier(s3, repoBucket, bucketName);
+    S3ResourceCopier copier = new S3ResourceCopier(s3, repoBucket, bucketName, cfBaseDir);
     List<S3Resource> s3Resources = null;
     try {
       s3Resources = copier.parseResources(csvPath);

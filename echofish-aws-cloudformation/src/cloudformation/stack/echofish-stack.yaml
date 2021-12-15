@@ -109,6 +109,27 @@ Parameters:
     Type: Number
     MinValue: 1
     Default: 2
+  Zarr2GeoHashLambdaTimeout:
+    Description: The timeout in seconds for the Zarr to GeoHash lambda
+    Type: Number
+    MinValue: 10
+    MaxValue: 900
+    Default: 900
+  Zarr2GeoHashLambdaMemorySize:
+    Description: The amount of memory for the Zarr to GeoHash lambda
+    Type: Number
+    MinValue: 256
+    Default: 2048
+  Zarr2GeoHashLambdaMaxConcurrency:
+    Description: The maximum number of concurrent Zarr accumulation requests.
+    Type: Number
+    MinValue: 1
+    Default: 4
+  GeoHashUploadBuffers:
+    Description: The maximum sets of batches to keep in memory when uploading GeoHashs
+    Type: Number
+    MinValue: 1
+    Default: 3
 #  UiBucketName:
 #    Type: String
   DeployAdminResources:
@@ -264,14 +285,6 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @cr.version@
-  ZgeoIsRelease:
-    Fn::Equals:
-      - @zgeo.version@
-      - Fn::Join:
-          - ""
-          - Fn::Split:
-              - "-SNAPSHOT"
-              - @zgeo.version@
   R2zIsRelease:
     Fn::Equals:
       - @r2z.version@
@@ -306,7 +319,7 @@ Conditions:
               - @api.version@
   DsIsRelease:
     Fn::Equals:
-      - @cr.version@
+      - @ds.version@
       - Fn::Join:
           - ""
           - Fn::Split:
@@ -314,12 +327,20 @@ Conditions:
               - @ds.version@
   MvtIsRelease:
     Fn::Equals:
-      - @cr.version@
+      - @mvt.version@
       - Fn::Join:
           - ""
           - Fn::Split:
               - "-SNAPSHOT"
               - @mvt.version@
+  GeohIsRelease:
+    Fn::Equals:
+      - @geoh.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @geoh.version@
 
 Resources:
 
@@ -472,7 +493,7 @@ Resources:
           Fn::GetAtt:
             - TopicStack
             - Outputs.DeadLetterTopicArn
-        Version: !If [ZgeoIsRelease, @zgeo.version@, @zgeo.version@@dashTimestamp@]
+        Version: !If [MvtIsRelease, @mvt.version@, @mvt.version@@dashTimestamp@]
         MvtDoneTopicArn:
           Fn::GetAtt:
             - TopicStack
@@ -480,6 +501,40 @@ Resources:
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2mvt-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+  Zarr2GeoHashStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        GeoHashUploadBuffers: !Ref GeoHashUploadBuffers
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        LambdaRolePermissionsBoundary: !Ref LambdaRolePermissionsBoundary
+        Zarr2GeoHashLambdaTimeout: !Ref Zarr2GeoHashLambdaTimeout
+        Zarr2GeoHashLambdaMemorySize: !Ref Zarr2GeoHashLambdaMemorySize
+        Zarr2GeoHashLambdaMaxConcurrency: !Ref Zarr2GeoHashLambdaMaxConcurrency
+        ZarrStoreBucketName:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.ZarrStoreBucketName
+        GeoHashBucketName:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.GeoHashBucketName
+        LogRetentionInDays: !Ref LogRetentionInDays
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - TopicStack
+            - Outputs.DeadLetterTopicArn
+        Version: !If [ GeohIsRelease, @geoh.version@, @geoh.version@@dashTimestamp@ ]
+        GeoHashDoneTopicArn:
+          Fn::GetAtt:
+            - TopicStack
+            - Outputs.GeoHashDoneTopicArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2geohash-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
@@ -580,36 +635,36 @@ Resources:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
 
-  GeometryPipelineStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      Parameters:
-        MvtGenerationQueueArn:
-          Fn::GetAtt:
-            - QueueStack
-            - Outputs.MvtGenerationQueueArn
-        LambdaRolePermissionsBoundary: !Ref LambdaRolePermissionsBoundary
-        LogRetentionInDays: !Ref LogRetentionInDays
-        DeploymentBucketName:
-          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-        MvtDockerVersion: !If [MvtIsRelease, @mvt.version@, @mvt.version@@dashTimestamp@]
-        DynamicStackLambdaVersion: !If [DsIsRelease, @ds.version@, @ds.version@@dashTimestamp@]
-        MvtBucketName:
-          Fn::GetAtt:
-            - BucketStack
-            - Outputs.MvtBucketName
-        MbTilesBucketName:
-          Fn::GetAtt:
-            - BucketStack
-            - Outputs.MbTilesBucketName
-        InstanceType: !Ref MvtGenInstanceType
-        VolumeSizeGB: !Ref MvtGenVolumeSizeGB
-        QuietPeriodMs: !Ref MvtTerminationQuietPeriodMs
-      TemplateURL:
-        Fn::Sub:
-          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/mvt-stack.yaml
-          - DeploymentBucketName:
-              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+#  GeometryPipelineStack:
+#    Type: AWS::CloudFormation::Stack
+#    Properties:
+#      Parameters:
+#        MvtGenerationQueueArn:
+#          Fn::GetAtt:
+#            - QueueStack
+#            - Outputs.MvtGenerationQueueArn
+#        LambdaRolePermissionsBoundary: !Ref LambdaRolePermissionsBoundary
+#        LogRetentionInDays: !Ref LogRetentionInDays
+#        DeploymentBucketName:
+#          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+#        MvtDockerVersion: !If [MvtIsRelease, @mvt.version@, @mvt.version@@dashTimestamp@]
+#        DynamicStackLambdaVersion: !If [DsIsRelease, @ds.version@, @ds.version@@dashTimestamp@]
+#        MvtBucketName:
+#          Fn::GetAtt:
+#            - BucketStack
+#            - Outputs.MvtBucketName
+#        MbTilesBucketName:
+#          Fn::GetAtt:
+#            - BucketStack
+#            - Outputs.MbTilesBucketName
+#        InstanceType: !Ref MvtGenInstanceType
+#        VolumeSizeGB: !Ref MvtGenVolumeSizeGB
+#        QuietPeriodMs: !Ref MvtTerminationQuietPeriodMs
+#      TemplateURL:
+#        Fn::Sub:
+#          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/mvt-stack.yaml
+#          - DeploymentBucketName:
+#              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
 
   TopicSubscriptionStack:
@@ -645,14 +700,6 @@ Resources:
           Fn::GetAtt:
             - QueueStack
             - Outputs.MvtGenerationQueueUrl
-        DeployGeometryMvtPipelineLambdaArn:
-          Fn::GetAtt:
-            - GeometryPipelineStack
-            - Outputs.DeployGeometryMvtPipelineLambdaArn
-        DeployGeometryMvtPipelineLambdaName:
-          Fn::GetAtt:
-            - GeometryPipelineStack
-            - Outputs.DeployGeometryMvtPipelineLambdaName
         DeployRaw2ZarrLambdaArn:
           Fn::GetAtt:
             - Raw2ZarrStack
@@ -681,10 +728,14 @@ Resources:
           Fn::GetAtt:
             - ZarrAccumulatorStack
             - Outputs.ZarrAccumulatorLambdaName
-        Zarr2CruiseMvtLambdaArn:
+        Zarr2MvtLambdaArn:
           Fn::GetAtt:
             - Zarr2MvtStack
-            - Outputs.Zarr2CruiseMvtLambdaArn
+            - Outputs.Zarr2MvtLambdaArn
+        Zarr2GeoHashLambdaArn:
+          Fn::GetAtt:
+            - Zarr2GeoHashStack
+            - Outputs.Zarr2GeoHashLambdaArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/topic-subscription-stack.yaml

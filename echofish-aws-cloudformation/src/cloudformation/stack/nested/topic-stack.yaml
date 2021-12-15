@@ -19,6 +19,12 @@ Resources:
   ZarrAccumulatorDoneTopic:
     Type: AWS::SNS::Topic
 
+  MvtDoneTopic:
+    Type: AWS::SNS::Topic
+
+  GeoHashDoneTopic:
+    Type: AWS::SNS::Topic
+
 
 Outputs:
   Raw2ZarrTopicArn:
@@ -31,6 +37,10 @@ Outputs:
     Value: !Ref ZarrAccumulatorReadyTopic
   DeadLetterTopicArn:
     Value: !Ref DeadLetterTopic
+  MvtDoneTopicArn:
+    Value: !Ref MvtDoneTopic
+  GeoHashDoneTopicArn:
+    Value: !Ref GeoHashDoneTopic
 
 
 

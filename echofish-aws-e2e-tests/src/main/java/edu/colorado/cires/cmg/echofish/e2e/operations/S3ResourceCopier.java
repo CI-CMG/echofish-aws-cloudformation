@@ -27,11 +27,13 @@ public class S3ResourceCopier {
   private final S3Operations s3;
   private final String repositoryBucket;
   private final String deploymentBucket;
+  private final Path cfBaseDir;
 
-  public S3ResourceCopier(S3Operations s3, String repositoryBucket, String deploymentBucket) {
+  public S3ResourceCopier(S3Operations s3, String repositoryBucket, String deploymentBucket, Path cfBaseDir) {
     this.s3 = s3;
     this.repositoryBucket = repositoryBucket;
     this.deploymentBucket = deploymentBucket;
+    this.cfBaseDir = cfBaseDir;
 
   }
 
@@ -83,20 +85,9 @@ public class S3ResourceCopier {
     return (s3Resource.getClassifier().equals("jar") ? "" : "-" + s3Resource.getClassifier()) + "." + s3Resource.getExtension();
   }
 
-  private String resolveRepositoryPath(S3Resource s3Resource) {
-    String start = s3Resource.getVersion().endsWith("-SNAPSHOT") ? "snapshot" : "release";
-    Path path = Paths.get(start, s3Resource.getGroup().split("\\."));
-    path = path.resolve(s3Resource.getArtifact()).resolve(s3Resource.getVersion());
-    List<String> artifacts = s3.listObjects(repositoryBucket, path.toString());
-    Collections.sort(artifacts);
-    Collections.reverse(artifacts);
-    for(String artifact : artifacts) {
-      String fileName = Paths.get(artifact).getFileName().toString();
-      if(fileName.startsWith(s3Resource.getArtifact() + "-") && fileName.endsWith(suffix(s3Resource))) {
-        return artifact;
-      }
-    }
-    return null;
+  private Path resolveRepositoryPath(S3Resource s3Resource) {
+    return cfBaseDir.resolve("target/dependency")
+        .resolve(s3Resource.getArtifact() + "-" + s3Resource.getVersion() + "-" + s3Resource.getClassifier() + "." + s3Resource.getExtension());
   }
 
   private String resolveDeploymentPath(S3Resource s3Resource) {
@@ -116,10 +107,10 @@ public class S3ResourceCopier {
       if(localResources.contains(id)) {
         throw new UnsupportedOperationException("Not supported yet");
       } else {
-        String repoPath = resolveRepositoryPath(s3Resource);
+        Path filePath = resolveRepositoryPath(s3Resource);
         String deploymentPath = resolveDeploymentPath(s3Resource);
-        LOGGER.info("Copying S3 resource: {}/{} to {}/{}", repositoryBucket, repoPath, deploymentBucket, deploymentPath);
-        s3.copyObject(repositoryBucket, repoPath, deploymentBucket, deploymentPath);
+        LOGGER.info("Copying S3 resource: {} to {}/{}", filePath, deploymentBucket, deploymentPath);
+        s3.upload(filePath, deploymentBucket, deploymentPath);
       }
     }
   }

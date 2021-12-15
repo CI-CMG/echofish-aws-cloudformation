@@ -1,9 +1,9 @@
 id,group,artifact,version,timestamp,classifier,extension,directory
-zgeo,edu.colorado.cires.cmg.echofish,echofish-aws-zarr-geojson-lambda,@zgeo.version@,@dashTimestamp@,lambda,zip,lambda
 r2z,edu.colorado.cires.cmg.echofish,echofish-aws-raw2zarr,@r2z.version@,@dashTimestamp@,docker,tar.gz,docker
 cr,edu.colorado.cires.cmg.echofish,echofish-aws-custom-resource-lambda,@cr.version@,@dashTimestamp@,lambda,zip,lambda
 za,edu.colorado.cires.cmg.echofish,echofish-aws-zarr-accumulator-lambda,@za.version@,@dashTimestamp@,lambda,zip,lambda
 ui,edu.colorado.cires.cmg.echofish,echofish-aws-ui,@ui.version@,@dashTimestamp@,zip,zip,ui
 api,edu.colorado.cires.cmg.echofish,echofish-aws-api-lambda,@api.version@,@dashTimestamp@,lambda,zip,lambda
 ds,edu.colorado.cires.cmg.echofish,echofish-aws-dynamic-stack-lambda,@ds.version@,@dashTimestamp@,lambda,zip,lambda
-mvt,edu.colorado.cires.cmg.echofish,echofish-aws-mvtgen,@mvt.version@,@dashTimestamp@,docker,tar.gz,docker
+mvt,io.github.ci-cmg.echofish,echofish-aws-mvt-lambda,@mvt.version@,@dashTimestamp@,lambda,zip,lambda
+geoh,io.github.ci-cmg.echofish,echofish-aws-geohash-lambda,@geoh.version@,@dashTimestamp@,lambda,zip,lambda

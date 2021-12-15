@@ -11,8 +11,6 @@ Parameters:
     Type: String
   Raw2ZarrTopicArn:
     Type: String
-  GeoJsonBucketArn:
-    Type: String
   MvtGenerationQueueArn:
     Type: String
   MvtGenerationQueueUrl:
@@ -21,10 +19,10 @@ Parameters:
     Type: String
   GeohashGenerationQueueUrl:
     Type: String
-  DeployGeometryMvtPipelineLambdaArn:
-    Type: String
-  DeployGeometryMvtPipelineLambdaName:
-    Type: String
+#  DeployGeometryMvtPipelineLambdaArn:
+#    Type: String
+#  DeployGeometryMvtPipelineLambdaName:
+#    Type: String
   DeployRaw2ZarrLambdaArn:
     Type: String
   DeployRaw2ZarrLambdaName:
@@ -41,7 +39,11 @@ Parameters:
     Type: String
   Zarr2MvtLambdaArn:
     Type: String
+  Zarr2MvtLambdaName:
+    Type: String
   Zarr2GeohashLambdaArn:
+    Type: String
+  Zarr2GeohashLambdaName:
     Type: String
 
 Conditions:
@@ -302,18 +304,6 @@ Resources:
                       - "/"
                       - !Ref AWS::StackId
         Statement:
-          - Sid: SubscribeToTopic
-            Resource: !Ref ZarrAccumulatorDoneTopicArn
-            Effect: Allow
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sns:Subscribe
-            Condition:
-              ForAnyValue:ArnEquals:
-                aws:SourceArn:
-                  - !Ref Zarr2GeoJsonLambdaArn
           - Sid: PublishToTopic
             Resource: !Ref ZarrAccumulatorDoneTopicArn
             Effect: Allow
@@ -325,22 +315,6 @@ Resources:
             Condition:
               ArnEquals:
                 aws:SourceArn: !Ref ZarrAccumulatorLambdaArn
-
-  SubscribeZarrAccumulatorDoneTopicZarr2GeoJsonLambda:
-    Type: AWS::SNS::Subscription
-    Properties:
-      Protocol: lambda
-      Endpoint: !Ref Zarr2GeoJsonLambdaArn
-      TopicArn: !Ref ZarrAccumulatorDoneTopicArn
-
-  TriggerZarr2GeoJsonLambda:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref Zarr2GeoJsonLambdaArn
-      Principal: sns.amazonaws.com
-      Action: lambda:InvokeFunction
-      SourceArn: !Ref ZarrAccumulatorDoneTopicArn
-
 
   DeadLetterTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -384,5 +358,7 @@ Resources:
                 aws:SourceArn:
                   - !Ref DeployRaw2ZarrLambdaArn
                   - !Ref ZarrAccumulatorLambdaArn
+                  - !Ref Zarr2MvtLambdaArn
+                  - !Ref Zarr2GeohashLambdaArn
 
 

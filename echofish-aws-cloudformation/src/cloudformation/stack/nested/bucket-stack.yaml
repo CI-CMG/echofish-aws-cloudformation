@@ -34,8 +34,8 @@ Mappings:
       Value: echofish-geohash
     UiBucket:
       Value: echofish-ui
-    CruiseMvtBucket:
-      Value: echofish-cruise-mvt
+#    CruiseMvtBucket:
+#      Value: echofish-cruise-mvt
     MvtBucket:
       Value: echofish-mvt
     MbTilesBucket:
@@ -89,13 +89,13 @@ Resources:
                      - Suffix: !FindInMap [BucketNameMap, ZarrStoreBucket, Value]
                  - Fn::Sub:
                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
-                     - Suffix: !FindInMap [BucketNameMap, GeoJsonBucket, Value]
-                 - Fn::Sub:
-                     - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
                      - Suffix: !FindInMap [BucketNameMap, MvtBucket, Value]
                  - Fn::Sub:
                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
                      - Suffix: !FindInMap [BucketNameMap, MbTilesBucket, Value]
+                 - Fn::Sub:
+                     - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                     - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
                 Action:
                   - s3:DeleteObject
               - Effect: Allow
@@ -108,13 +108,13 @@ Resources:
                       - Suffix: !FindInMap [BucketNameMap, ZarrStoreBucket, Value]
                   - Fn::Sub:
                       - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
-                      - Suffix: !FindInMap [BucketNameMap, GeoJsonBucket, Value]
-                  - Fn::Sub:
-                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
                       - Suffix: !FindInMap [BucketNameMap, MvtBucket, Value]
                   - Fn::Sub:
                       - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
                       - Suffix: !FindInMap [BucketNameMap, MbTilesBucket, Value]
+                  - Fn::Sub:
+                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                      - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
                 Action:
                   - s3:ListBucket
 

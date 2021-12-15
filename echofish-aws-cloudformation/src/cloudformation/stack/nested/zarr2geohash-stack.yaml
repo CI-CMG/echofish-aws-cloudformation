@@ -6,27 +6,17 @@ Parameters:
     Type: String
   LambdaRolePermissionsBoundary:
     Type: String
-  Zarr2MvtLambdaTimeout:
+  Zarr2GeoHashLambdaMaxConcurrency:
     Type: Number
-  Zarr2MvtLambdaMemorySize:
+  Zarr2GeoHashLambdaTimeout:
+    Type: Number
+  Zarr2GeoHashLambdaMemorySize:
     Type: Number
   ZarrStoreBucketName:
     Type: String
-  MvtBucketName:
+  GeoHashBucketName:
     Type: String
-  MvtTracklineSplitMs:
-    Type: Number
-  MvtBatchSize:
-    Type: Number
-  MvtTracklinePrecision:
-    Type: Number
-  MvtMaxZoomLevel:
-    Type: Number
-  MvtTracklineMinSimplificationTolerance:
-    Type: Number
-  MvtTracklineMaxSimplificationTolerance:
-    Type: Number
-  MvtUploadBuffers:
+  GeoHashUploadBuffers:
     Type: Number
   LogRetentionInDays:
     Type: Number
@@ -34,7 +24,7 @@ Parameters:
     Type: String
   Version:
     Type: String
-  MvtDoneTopicArn:
+  GeoHashDoneTopicArn:
     Type: String
 
 
@@ -47,7 +37,7 @@ Conditions:
 
 Resources:
 
-  Zarr2MvtLambdaRole:
+  Zarr2GeoHashLambdaRole:
     Type: AWS::IAM::Role
     Properties:
       PermissionsBoundary:
@@ -96,43 +86,37 @@ Resources:
               - Effect: Allow
                 Resource:
                   - !Ref DeadLetterTopicArn
-                  - !Ref MvtDoneTopicArn
+                  - !Ref GeoHashDoneTopicArn
                 Action:
                   - sns:Publish
 
-  Zarr2MvtLambda:
+  Zarr2GeoHashLambda:
     Type: AWS::Lambda::Function
     Properties:
       Code:
         S3Bucket: !Ref DeploymentBucketName
-        S3Key: !Sub lambda/echofish-aws-mvt-lambda-${Version}-lambda.zip
-      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.mvt.lambda.MvtLambda::handleRequest
+        S3Key: !Sub lambda/echofish-aws-geohash-lambda-${Version}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.geohash.GeoHashLambda::handleRequest
       Runtime: java11
-      MemorySize: !Ref Zarr2MvtLambdaMemorySize
-      Timeout: !Ref Zarr2MvtLambdaTimeout
-      ReservedConcurrentExecutions: 1
-      Role: !GetAtt Zarr2MvtLambdaRole.Arn
+      MemorySize: !Ref Zarr2GeoHashLambdaMemorySize
+      Timeout: !Ref Zarr2GeoHashLambdaTimeout
+      ReservedConcurrentExecutions: !Ref Zarr2GeoHashLambdaMaxConcurrency
+      Role: !GetAtt Zarr2GeoHashLambdaRole.Arn
       Environment:
         Variables:
           ZARR_BUCKET_NAME: !Ref ZarrStoreBucketName
-          TRACKLINE_SPLIT_MS: !Ref MvtTracklineSplitMs
-          BATCH_SIZE: !Ref MvtBatchSize
-          GEO_JSON_PRECISION: !Ref MvtTracklinePrecision
-          MAX_ZOOM_LEVEL: !Ref MvtMaxZoomLevel
-          MIN_SIMPLIFICATION_TOLERANCE: !Ref MvtTracklineMinSimplificationTolerance
-          MAX_SIMPLIFICATION_TOLERANCE: !Ref MvtTracklineMaxSimplificationTolerance
-          MVT_BUCKET_NAME: !Ref MvtBucketName
-          S3_UPLOAD_BUFFERS: !Ref MvtUploadBuffers
-  Zarr2MvtLambdaLogGroup:
+          GEOHASH_BUCKET_NAME: !Ref GeoHashBucketName
+          S3_UPLOAD_BUFFERS: !Ref GeoHashUploadBuffers
+  Zarr2GeoHashLambdaLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${Zarr2MvtLambda}
+      LogGroupName: !Sub /aws/lambda/${Zarr2GeoHashLambda}
       RetentionInDays: !Ref LogRetentionInDays
 
-  Zarr2MvtLambdaEvent:
+  Zarr2GeoHashLambdaEvent:
     Type: AWS::Lambda::EventInvokeConfig
     Properties:
-      FunctionName: !Ref Zarr2MvtLambda
+      FunctionName: !Ref Zarr2GeoHashLambda
       Qualifier: $LATEST
       MaximumRetryAttempts: 0
       DestinationConfig:
@@ -141,10 +125,11 @@ Resources:
 
 
 Outputs:
-  Zarr2MvtLambdaArn:
-    Value: !GetAtt Zarr2MvtLambda.Arn
-  Zarr2MvtLambdaName:
-    Value: !Ref Zarr2MvtLambda
+  Zarr2GeoHashLambdaArn:
+    Value: !GetAtt Zarr2GeoHashLambda.Arn
+  Zarr2GeoHashLambdaName:
+    Value: !Ref Zarr2GeoHashLambda
+
 
 
 
