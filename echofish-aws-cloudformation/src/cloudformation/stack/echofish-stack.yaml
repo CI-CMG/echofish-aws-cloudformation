@@ -680,18 +680,6 @@ Resources:
           Fn::GetAtt:
             - TopicStack
             - Outputs.Raw2ZarrTopicArn
-        GeoJsonLandedTopicArn:
-          Fn::GetAtt:
-            - TopicStack
-            - Outputs.GeoJsonLandedTopicArn
-        GeoJsonBucketName:
-          Fn::GetAtt:
-            - BucketStack
-            - Outputs.GeoJsonBucketName
-        GeoJsonBucketArn:
-          Fn::GetAtt:
-            - BucketStack
-            - Outputs.GeoJsonBucketArn
         MvtGenerationQueueArn:
           Fn::GetAtt:
             - QueueStack
