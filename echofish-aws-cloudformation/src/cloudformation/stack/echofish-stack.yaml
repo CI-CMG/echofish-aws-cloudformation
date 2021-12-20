@@ -732,6 +732,14 @@ Resources:
           Fn::GetAtt:
             - Zarr2GeoHashStack
             - Outputs.Zarr2GeoHashLambdaArn
+        Zarr2MvtLambdaName:
+          Fn::GetAtt:
+            - Zarr2MvtStack
+            - Outputs.2MvtLambdaName
+        Zarr2GeoHashLambdaName:
+          Fn::GetAtt:
+            - Zarr2GeoHashStack
+            - Outputs.Zarr2GeoHashLambdaName
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/topic-subscription-stack.yaml
