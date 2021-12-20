@@ -735,7 +735,7 @@ Resources:
         Zarr2MvtLambdaName:
           Fn::GetAtt:
             - Zarr2MvtStack
-            - Outputs.2MvtLambdaName
+            - Outputs.Zarr2MvtLambdaName
         Zarr2GeoHashLambdaName:
           Fn::GetAtt:
             - Zarr2GeoHashStack
