@@ -15,9 +15,9 @@ Parameters:
     Type: String
   MvtGenerationQueueUrl:
     Type: String
-  GeohashGenerationQueueArn:
+  GeoHashGenerationQueueArn:
     Type: String
-  GeohashGenerationQueueUrl:
+  GeoHashGenerationQueueUrl:
     Type: String
 #  DeployGeometryMvtPipelineLambdaArn:
 #    Type: String
@@ -41,9 +41,9 @@ Parameters:
     Type: String
   Zarr2MvtLambdaName:
     Type: String
-  Zarr2GeohashLambdaArn:
+  Zarr2GeoHashLambdaArn:
     Type: String
-  Zarr2GeohashLambdaName:
+  Zarr2GeoHashLambdaName:
     Type: String
 
 Conditions:
@@ -132,12 +132,12 @@ Resources:
     Type: AWS::SQS::QueuePolicy
     Properties:
       Queues:
-        - !Ref GeohashGenerationQueueUrl
+        - !Ref GeoHashGenerationQueueUrl
       PolicyDocument:
         Version: 2012-10-17
         Statement:
           - Sid: PublishToTopic
-            Resource: !Ref GeohashGenerationQueueArn
+            Resource: !Ref GeoHashGenerationQueueArn
             Effect: Allow
             Principal:
               Service:
@@ -147,30 +147,6 @@ Resources:
             Condition:
               ArnEquals:
                 aws:SourceArn: !Ref ZarrAccumulatorDoneTopicArn
-
-#  SubscribeGeoJsonLandedTopicMvtGenerationQueue:
-#    Type: AWS::SNS::Subscription
-#    Properties:
-#      Protocol: sqs
-#      Endpoint: !Ref MvtGenerationQueueArn
-#      TopicArn: !Ref GeoJsonLandedTopicArn
-#
-#
-#  SubscribeGeoJsonLandedTopicDeployGeometryMvtPipeline:
-#    Type: AWS::SNS::Subscription
-#    Properties:
-#      Protocol: lambda
-#      Endpoint: !Ref DeployGeometryMvtPipelineLambdaArn
-#      TopicArn: !Ref GeoJsonLandedTopicArn
-#
-#  TriggerDeployGeometryMvtPipelineLambda:
-#    Type: AWS::Lambda::Permission
-#    Properties:
-#      FunctionName: !Ref DeployGeometryMvtPipelineLambdaName
-#      Principal: sns.amazonaws.com
-#      Action: lambda:InvokeFunction
-#      SourceArn: !Ref GeoJsonLandedTopicArn
-
 
   Raw2ZarrTopicPolicy:
     Type: AWS::SNS::TopicPolicy
@@ -359,6 +335,6 @@ Resources:
                   - !Ref DeployRaw2ZarrLambdaArn
                   - !Ref ZarrAccumulatorLambdaArn
                   - !Ref Zarr2MvtLambdaArn
-                  - !Ref Zarr2GeohashLambdaArn
+                  - !Ref Zarr2GeoHashLambdaArn
 
 

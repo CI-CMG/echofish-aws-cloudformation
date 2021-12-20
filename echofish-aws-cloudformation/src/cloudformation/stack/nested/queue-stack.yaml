@@ -10,7 +10,7 @@ Resources:
   Raw2ZarrQueue:
     Type: AWS::SQS::Queue
 
-  GeohashGenerationQueue:
+  GeoHashGenerationQueue:
     Type: AWS::SQS::Queue
 Outputs:
   MvtGenerationQueueUrl:
@@ -21,7 +21,7 @@ Outputs:
     Value: !Ref Raw2ZarrQueue
   Raw2ZarrQueueArn:
     Value: !GetAtt Raw2ZarrQueue.Arn
-  GeohashGenerationQueueUrl:
-    Value: !Ref GeohashGenerationQueue
-  GeohashGenerationQueueArn:
-    Value: !GetAtt GeohashGenerationQueue.Arn
+  GeoHashGenerationQueueUrl:
+    Value: !Ref GeoHashGenerationQueue
+  GeoHashGenerationQueueArn:
+    Value: !GetAtt GeoHashGenerationQueue.Arn

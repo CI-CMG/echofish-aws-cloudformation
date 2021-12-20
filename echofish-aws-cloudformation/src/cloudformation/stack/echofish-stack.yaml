@@ -688,14 +688,14 @@ Resources:
           Fn::GetAtt:
             - QueueStack
             - Outputs.MvtGenerationQueueUrl
-        GeohashGenerationQueueArn:
+        GeoHashGenerationQueueArn:
           Fn::GetAtt:
             - QueueStack
-            - Outputs.GeohashGenerationQueueArn
-        GeohashGenerationQueueUrl:
+            - Outputs.GeoHashGenerationQueueArn
+        GeoHashGenerationQueueUrl:
           Fn::GetAtt:
             - QueueStack
-            - Outputs.GeohashGenerationQueueUrl
+            - Outputs.GeoHashGenerationQueueUrl
         DeployRaw2ZarrLambdaArn:
           Fn::GetAtt:
             - Raw2ZarrStack
@@ -731,7 +731,7 @@ Resources:
         Zarr2GeoHashLambdaArn:
           Fn::GetAtt:
             - Zarr2GeoHashStack
-            - Outputs.Zarr2GeoHashLambdaArn
+            - Outputs.Zarr2GeohashLambdaArn
         Zarr2MvtLambdaName:
           Fn::GetAtt:
             - Zarr2MvtStack
