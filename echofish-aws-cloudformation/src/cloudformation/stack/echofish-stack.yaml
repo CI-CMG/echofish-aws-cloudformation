@@ -691,7 +691,7 @@ Resources:
         GeohashGenerationQueueArn:
           Fn::GetAtt:
             - QueueStack
-            - Outputs.GeoHashGenerationQueueArn
+            - Outputs.GeohashGenerationQueueArn
         GeohashGenerationQueueUrl:
           Fn::GetAtt:
             - QueueStack
