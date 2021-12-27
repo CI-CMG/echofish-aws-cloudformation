@@ -261,8 +261,6 @@ Resources:
       Action: lambda:InvokeFunction
       SourceArn: !Ref ZarrAccumulatorReadyTopicArn
 
-
-
   ZarrAccumulatorDoneTopicPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
