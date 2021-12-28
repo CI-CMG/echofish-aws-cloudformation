@@ -290,6 +290,36 @@ Resources:
               ArnEquals:
                 aws:SourceArn: !Ref ZarrAccumulatorLambdaArn
 
+  SubscribeZarrAccumulatorDoneTopicMvtGenerationQueue:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      Endpoint: !Ref MvtGenerationQueueArn
+      TopicArn: !Ref ZarrAccumulatorDoneTopicArn
+
+  TriggerZarr2MvtLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Zarr2MvtLambdaName
+      Principal: sqs.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref MvtGenerationQueueArn
+
+  SubscribeZarrAccumulatorDoneTopicGeoHashGenerationQueue:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      Endpoint: !Ref GeoHashGenerationQueueArn
+      TopicArn: !Ref ZarrAccumulatorDoneTopicArn
+
+  TriggerZarr2GeoHashLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Zarr2GeoHashLambdaName
+      Principal: sqs.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref GeoHashGenerationQueueArn
+
   DeadLetterTopicPolicy:
     Type: AWS::SNS::TopicPolicy
     Properties:
