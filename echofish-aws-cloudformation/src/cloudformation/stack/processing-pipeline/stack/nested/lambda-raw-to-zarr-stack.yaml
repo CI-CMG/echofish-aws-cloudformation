@@ -1,0 +1,174 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Raw to Zarr Conversion Lambda
+
+Parameters:
+  DeploymentBucketName:
+    Description: The deployment bucket
+    Type: String
+  ProcessingBucketName:
+    Description: The processing bucket
+    Type: String
+  PrefixMappingDynamoDbTable:
+    Description: The DynamoDB table containing NGDC ID mappings
+    Type: String
+  CounterDynamoDbTable:
+    Description: The DynamoDB table containing NGDC ID counters
+    Type: String
+  LambdaRolePermissionsBoundary:
+    Description: An optional permissions boundary to associate with the Lambda role
+    Type: String
+  EnrichmentLambdaMemorySize:
+    Description: The amount of memory for the enrichment lambda
+    Type: Number
+    MinValue: 256
+    Default: 512
+  EnrichmentLambdaTimeout:
+    Description: The timeout in seconds for the enrichment lambda
+    Type: Number
+    MinValue: 10
+    MaxValue: 900
+    Default: 120
+  LogRetentionInDays:
+    Description: The number of days to keep CloudWatch logs
+    Type: Number
+    MinValue: 0
+    Default: 30
+  Version:
+    Description: The build version
+    Type: String
+  EnrichmentLambdaMaxConcurrency:
+    Description: The maximum number of concurrent enrichment lambda executions.
+    Type: Number
+    MinValue: 5
+    Default: 100 # TODO: what if this number is exceeded???
+  DeadLetterTopicArn:
+    Type: String
+  EnrichmentDoneTopicArn:
+    Type: String
+
+
+Conditions:
+  HasPermissionsBoundary:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - !Ref LambdaRolePermissionsBoundary
+
+
+Resources:
+
+  RawToZarrLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary:
+        Fn::If:
+          - HasPermissionsBoundary
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaRolePermissionsBoundary}
+          - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+        - PolicyName: S3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${ProcessingBucketName}/*
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+        - PolicyName: DynamoDB
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${PrefixMappingDynamoDbTable}
+                Action:
+                  - dynamodb:GetItem
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${CounterDynamoDbTable}
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+        - PolicyName: SNS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Ref DeadLetterTopicArn
+                Action:
+                  - sns:Publish
+              - Effect: Allow
+                Resource: !Ref EnrichmentDoneTopicArn
+                Action:
+                  - sns:Publish
+
+  RawToZarrLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Enriches trackline data
+      Code:
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/trackline-enrichment-${Version}-lambda.zip
+      Handler: gov.noaa.ncei.cmg.trackline.enrichment.EnrichmentLambda::handleRequest
+      Runtime: java11
+      MemorySize: !Ref EnrichmentLambdaMemorySize
+      Timeout: !Ref EnrichmentLambdaTimeout
+      ReservedConcurrentExecutions: !Ref EnrichmentLambdaMaxConcurrency
+      #      TracingConfig: Active
+      Role: !GetAtt RawToZarrLambdaRole.Arn
+      Environment:
+        Variables:
+          COUNTER_TABLE: !Ref CounterDynamoDbTable
+          PREFIX_TABLE: !Ref PrefixMappingDynamoDbTable
+          PROCESSING_BUCKET: !Ref ProcessingBucketName
+          SUCCESS_TOPIC_ARN: !Ref EnrichmentDoneTopicArn
+
+  EnrichmentLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${EnrichmentLambda}
+      RetentionInDays: !Ref LogRetentionInDays
+
+  EnrichmentLambdaEvent:
+    # By default, Lambda retries an asynchronous invocation twice if the function returns an error.
+    # It retains events in a queue for up to six hours. When an event fails all processing attempts
+    # or stays in the asynchronous invocation queue for too long, Lambda discards it.
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      DestinationConfig:
+        OnFailure:
+          Destination: !Ref DeadLetterTopicArn
+      #        OnFailure:
+      #          Destination: arn:aws:sqs:us-east-2:123456789012:dlq
+      #        OnSuccess:
+      #          Destination: arn:aws:sqs:us-east-2:123456789012:dlq
+      FunctionName: !Ref RawToZarrLambdaFunction
+      MaximumRetryAttempts: 0
+      Qualifier: $LATEST
+
+
+
+Outputs:
+  RawToZarrLambdaFunctionArn:
+    Value: !GetAtt RawToZarrLambdaFunction.Arn
+  RawToZarrLambdaFunctionName:
+    Value: !Ref RawToZarrLambdaFunction

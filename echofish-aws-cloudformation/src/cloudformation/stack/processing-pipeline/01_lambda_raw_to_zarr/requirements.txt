@@ -1,0 +1,4 @@
+pandas==1.5.3
+zarr==2.14.2
+xarray==2022.3.0
+echopype==0.7.0

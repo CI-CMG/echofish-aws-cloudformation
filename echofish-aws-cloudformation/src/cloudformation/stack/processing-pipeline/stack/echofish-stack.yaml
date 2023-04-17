@@ -1,0 +1,550 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "EchoFish - Processing raw echosounder data with Docker & Echopype (updated: april 5, 2023)."
+# aws --profile=echofish --region=us-east-1 cloudformation create-stack --stack-name rudyteststackdelete --template-body file://echofish-stack.yaml --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+# aws --profile=echofish --region=us-east-1 cloudformation update-stack --stack-name rudyteststackdelete --template-body file://echofish-stack.yaml --capabilities CAPABILITY_IAM CAPABILITY_AUTO_EXPAND
+# ec2-metadata -z
+
+Parameters:
+  EnvironmentType:
+    Description: "The deployment environment type."
+    Type: String
+    Default: "dev"
+    AllowedValues:
+      - "dev"
+      - "prod"
+  InputBucketName:
+    Description: "Name of public bucket where RAW files reside, e.g. noaa-wcsd-pds."
+    Type: String
+    Default: "noaa-wcsd-pds"
+  OutputBucketName:
+    Description: "Name of public bucket where Zarr stores will be written, e.g. noaa-wcsd-zarr-pds."
+    Type: String
+    Default: "noaa-wcsd-zarr-pds"
+  RepositoryBucketName:
+    Description: "Custom AWS Elastic Container Registry Image for processing data."
+    Type: String
+    Default: "public.ecr.aws/e9n4y3z7/aws-cf-deploy-containerized-app-on-ec2:latest"
+  StackPrefix:
+    Description: "A unique prefix that identifies this stack."
+    Type: String
+    Default: "echofish"
+  DynamoDBTableName:
+    Description: "A unique prefix that identifies this stack."
+    Type: String
+    Default: "noaa-wcsd-pds"
+    # noaa-wcsd-pds and noaa-wcsd-zarr-pds
+  KeyName:
+    Description: "Name of an existing EC2 KeyPair to enable SSH access to the instance."
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: "Must be created in the correct region."
+    Default: "rudy-key"
+  OSVolumeSizeGB:
+    Description: "Disk size for the OS."
+    Type: Number
+    Default: "16"
+  InstanceType:
+    Description: "EC2 instance type."
+    Type: String
+    Default: "t4g.small"
+    AllowedValues:
+      #- "t4g.nano"    # 2 vCPU, 0.5 GiB Memory, $0.0042 hourly rate
+      - "t4g.small"   # 2     ,   2           , FREE until Dec 31st 2023
+      - "t4g.medium"  # 2     ,   4           , $0.0336
+      - "t4g.large"   # 2     ,   8           , $0.0672
+      - "t4g.xlarge"  # 4     ,  16           , $0.1344
+      - "t4g.2xlarge" # 8     ,  32           , $0.2688
+  OrchestratorInstanceType:
+    Description: "EC2 instance type."
+    Type: String
+    Default: "t4g.nano"
+    AllowedValues:
+      - "t4g.nano"    # 2 vCPU, 0.5 GiB Memory, $0.0042 hourly rate
+      - "t4g.small"   # 2     ,   2           , FREE until Dec 31st 2023
+    ConstraintDescription: "Machines smaller than t4g.medium have been too small to compile docker & needed python requirements."
+  DeploymentBucketName:
+    Description: "Bucket must be manually created before stack template files can be uploaded."
+    Type: String
+    Default: "rudy-echofish-test-delete"
+  SecretsManagerKeystore:
+    Description: "Keystore ARN for echofish noaa-wcsd-zarr-pds bucket. Note: must already be created manually in the same region."
+    Type: String
+    Default: "arn:aws:secretsmanager:us-east-1:118234403147:secret:NOAA_WCSD_ZARR_PDS_BUCKET-8EOeEk"
+  RolePermissionsBoundary:
+    Description: "Permissions boundary needed in CIRES to associate roles. Note: different string than ucboitciresmggdev account."
+    Type: String
+    Default: "CIRES_Admin_PermissionBoundary"
+    AllowedValues:
+      - "CIRES_Admin_PermissionBoundary"
+
+Conditions:
+  IsDevelopment:
+    !Equals [ !Ref EnvironmentType, dev ]
+  IsProduction:
+    !Equals [ !Ref EnvironmentType, prod ]
+
+Mappings: # !FindInMap [ AWSRegionArch2AMI, !Ref "AWS::Region", HVM64 ]
+  AWSRegionArch2AMI:
+    us-east-1:
+      HVM64: "ami-01d9e06b75f9d69c4" # amazon linux 2023 ami
+    us-east-2:
+      HVM64: "ami-00556feabb8d3c3c6" # amazon linux 2023 ami
+    us-west-1:
+      HVM64: "ami-055aa79c1cb31eb71" # amazon linux 2023 ami
+    us-west-2:
+      HVM64: "ami-0699f753302dd8b00" # amazon linux 2023 ami
+  AWSRegion2AvailabilityZoneName:
+    us-east-1:
+      ZoneName: "us-east-1d"
+    us-east-2:
+      ZoneName: "us-east-2c"
+    us-west-1:
+      ZoneName: "us-west-1c"
+    us-west-2:
+      ZoneName: "us-west-2a"
+
+Resources:
+  RawToZarrEC2LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/ec2/${AWS::StackName}/${RawToZarrEC2Instance}'
+      RetentionInDays: 1
+      Tags:
+        - Key: "project"
+          Value: "echofish"
+        - Key: "prefix"
+          Value: !Ref StackPrefix
+#  OrchestratorEC2LogGroup:
+#    Type: AWS::Logs::LogGroup
+#    Properties:
+#      LogGroupName: !Sub '/aws/ec2/${AWS::StackName}/${OrchestratorEC2Instance}'
+#      RetentionInDays: 1
+#      Tags:
+#        - Key: "project"
+#          Value: "echofish"
+#        - Key: "prefix"
+#          Value: !Ref StackPrefix
+#  DLQLambdaLogGroup:
+#    Type: AWS::Logs::LogGroup
+#    Properties:
+#      LogGroupName: !Sub '/aws/ec2/${AWS::StackName}/${OrchestratorEC2Instance}'
+#      RetentionInDays: 1
+#      Tags:
+#        - Key: "project"
+#          Value: "echofish"
+#        - Key: "prefix"
+#          Value: !Ref StackPrefix
+
+#  OutOfMemoryErrorSubscriptionFilter:
+#    Type: AWS::Logs::SubscriptionFilter
+#    Properties:
+#      DestinationArn: !GetAtt MyLambdaFunc.Arn # Points to the lambda that is prompted when failures are encoutered
+#      FilterName: "FilterMemoryError"
+#      FilterPattern: "Error: Runtime exited with error: signal: killed"
+#      LogGroupName: String
+#      RoleArn: !GetAtt IAMRole.Arn
+#  OutOfTimeErrorSubscriptionFilter:
+#    Type: AWS::Logs::SubscriptionFilter
+#    Properties:
+#      DestinationArn: !GetAtt MyLambdaFunc.Arn # Points to the lambda that is prompted when failures are encoutered
+#      FilterName: "FilterMemoryError"
+#      FilterPattern: "Task timed out"
+#      LogGroupName: String
+#      RoleArn: !GetAtt IAMRole.Arn
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "For SSH on port 22 access and 8080 port access for the app."
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: tcp
+          FromPort: "8080"
+          ToPort: "8080"
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: "project"
+          Value: "echofish"
+        - Key: "prefix"
+          Value: !Ref StackPrefix
+    DeletionPolicy: Delete
+
+  IAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Tags:
+        - Key: "project"
+          Value: "echofish"
+        - Key: "prefix"
+          Value: !Ref StackPrefix
+      PermissionsBoundary: !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: "S3Access"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "s3:PutObject"
+                  - "s3:GetObject"
+                  - "s3:GetObjectAttributes"
+                  - "s3:ListBucket"
+                Resource: "*"
+        - PolicyName: "EC2Access"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "ec2:ImportKeyPair"
+                Resource: "*"
+        - PolicyName: "WriteLogs"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:CreateLogStream"
+                  - "logs:PutLogEvents"
+                  - "logs:DescribeLogStreams"
+                Resource: "arn:aws:logs:*:*:*"
+        - PolicyName: "SecretsManagerAccess"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "secretsmanager:GetSecretValue"
+                Resource:
+                  - !Ref SecretsManagerKeystore
+        - PolicyName: "SNSAccess"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "sns:Publish"
+                  - "sns:RemovePermission"
+                  - "sns:SetTopicAttributes"
+                  - "sns:DeleteTopic"
+                  - "sns:ListSubscriptionsByTopic"
+                  - "sns:GetTopicAttributes"
+                  - "sns:AddPermission"
+                  - "sns:Subscribe"
+                  - "sns:ListTopics"
+                Resource: "*"
+        - PolicyName: "SQSAccess"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "sqs:ReceiveMessage"
+                  - "sqs:SendMessage"
+                Resource:
+                  - "arn:aws:sqs:region:account-id:queue_xyz_receiving" # TODO: fill this in!
+                  - "arn:aws:sqs:region:account-id:queue_xyz_sending" # TODO: fill this in!
+          #"Resource": "arn:aws:sns:us-west-2:118234403147:delete-rudy-testing-topic:d79862de-433e-4e88-8b2e-ce1f570d3a12"
+        - PolicyName: "DynamoDBAccess"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "dynamodb:DescribeStream"
+                  - "dynamodb:BatchGet*"
+                  - "dynamodb:DescribeTable"
+                  - "dynamodb:Get*"
+                  - "dynamodb:Query"
+                  - "dynamodb:Scan"
+                  - "dynamodb:BatchWrite*"
+                  - "dynamodb:CreateTable"
+                  - "dynamodb:Delete*"
+                  - "dynamodb:Update*"
+                  - "dynamodb:PutItem"
+                  - "dynamodb:ListTables"
+                Resource:
+                  #- !Sub "arn:aws:dynamodb:*:*:table/${StackPrefix}-${DynamoDBTableName}"
+                  - !Sub "arn:aws:dynamodb:*:*:*"
+
+  IAMInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: '/'
+      Roles:
+        - !Ref IAMRole
+
+  # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-lambda-function.html
+#  RawToZarrLambdaFunction:
+#    Type: AWS::Lambda::Function
+#    Properties:
+#      #      TracingConfig: # https://docs.aws.amazon.com/lambda/latest/dg/python-tracing.html
+#      #        Mode: Active
+#      Architectures:
+#        - "arm64"
+#      Code:
+#        Code
+#      #    CodeSigningConfigArn: String
+#      DeadLetterConfig:
+#        DeadLetterConfig
+#      Description: "A Lambda for processing the data from raw to zarr format."
+#      Environment:
+#        Environment
+#      EphemeralStorage: # Size of /tmp directory in MB, any whole number between 512 and 10,240 MB.
+#        512
+#      Handler: "lambda_function.handler"
+#      MemorySize: 10240
+#      PackageType: "Image"
+#      #      ReservedConcurrentExecutions: Integer
+#      Role:
+#        !Ref IAMRole
+#      Runtime: "python3.9"
+#      Tags:
+#        - Key: "project"
+#          Value: "echofish"
+#        - Key: "prefix"
+#          Value: !Ref StackPrefix
+#      Timeout: 900
+
+  ### DYNAMO DB ###
+  WCSDPDSStatusDynamoDBTableDev:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: 'Delete'
+    Condition: IsDevelopment
+    Properties:
+      TableName: !Sub ${StackPrefix}-${DynamoDBTableName}
+      Tags:
+        - Key: "project"
+          Value: "echofish"
+        - Key: "prefix"
+          Value: !Ref StackPrefix
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: "KEY"
+          KeyType: "HASH"
+        - AttributeName: "CRUISE"
+          KeyType: "RANGE"
+      AttributeDefinitions:
+        - AttributeName: "KEY"
+          AttributeType: "S"
+        - AttributeName: "CRUISE"
+          AttributeType: "S"
+
+  WCSDPDSStatusDynamoDBTableProd:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: 'Retain'
+    Condition: IsProduction
+    Properties:
+      TableName: !Sub ${StackPrefix}-${DynamoDBTableName}
+      Tags:
+        - Key: "project"
+          Value: "echofish"
+        - Key: "prefix"
+          Value: !Ref StackPrefix
+      BillingMode: PAY_PER_REQUEST
+      KeySchema:
+        - AttributeName: "KEY"
+          KeyType: "HASH"
+        - AttributeName: "CRUISE"
+          KeyType: "RANGE"
+      AttributeDefinitions:
+        - AttributeName: "KEY"
+          AttributeType: "S"
+        - AttributeName: "CRUISE"
+          AttributeType: "S"
+
+  ### EC2 INSTANCES ###
+  RawToZarrEC2Instance:
+    Type: AWS::EC2::Instance
+    #DependsOn: # TODO: there might be a race condition here
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          update-stack:
+            - run-update-stack
+          default:
+            - run-init
+        run-init:
+          files:
+            "/etc/motd":
+              content: !Sub |
+                #*****************************************************************
+                #*****************************************************************
+                #   / __ \/   | / ___//  _/ ___/                                 #
+                #  / / / / /| | \__ \ / / \__ \                                  #
+                # / /_/ / ___ |___/ // / ___/ /                                  #
+                # \____/_/  |_/____/___//____/ CIRES MGG DEV TEAM                #
+                #*****************************************************************
+                #*****************************************************************
+              mode: '000777'
+              owner: root
+              group: root
+            "/etc/cfn/cfn-hup.conf":
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=5
+                verbose=true
+              mode: '000400'
+              owner: root
+              group: root
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.RawToZarrEC2Instance.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --configsets update-stack --stack=${AWS::StackName} --region=${AWS::Region} --resource=RawToZarrEC2Instance
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                  - '/etc/cfn/cfn-hup.conf'
+                  - '/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+        run-update-stack:
+          commands:
+            '01':
+              command: !Sub echo 'Stack Updated 121212'
+    Properties:
+      AvailabilityZone: !FindInMap [ AWSRegion2AvailabilityZoneName, !Ref "AWS::Region", ZoneName ]
+      SecurityGroupIds:
+        - !GetAtt EC2SecurityGroup.GroupId
+      KeyName: !Ref KeyName
+      EbsOptimized: false
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !FindInMap [ AWSRegionArch2AMI, !Ref "AWS::Region", HVM64 ]
+      InstanceType: !Ref InstanceType
+      Tags:
+        - Key: "project"
+          Value: "echofish"
+        - Key: "prefix"
+          Value: !Ref StackPrefix
+        - Key: "Name"
+          Value: "RawToZarr"
+      DisableApiTermination: 'FALSE'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          dnf update -y && dnf install -y docker jq htop
+          service docker start
+          usermod -a -G docker ec2-user
+          curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose
+          chmod +x /usr/local/bin/docker-compose
+          /opt/aws/bin/cfn-init -v --configsets default --stack ${AWS::StackName} --region ${AWS::Region} --resource=RawToZarrEC2Instance
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource=RawToZarrEC2Instance
+
+#  OrchestratorEC2Instance:
+#    Type: AWS::EC2::Instance
+#    #DependsOn: # TODO: there might be a race condition here
+#    CreationPolicy:
+#      ResourceSignal:
+#        Timeout: PT10M
+#    Metadata:
+#      AWS::CloudFormation::Init:
+#        configSets:
+#          update-stack:
+#            - run-update-stack
+#          default:
+#            - run-init
+#        run-init:
+#          files:
+#            "/etc/motd":
+#              content: !Sub |
+#                #*****************************************************************
+#                #*****************************************************************
+#                #   / __ \/   | / ___//  _/ ___/                                 #
+#                #  / / / / /| | \__ \ / / \__ \                                  #
+#                # / /_/ / ___ |___/ // / ___/ /                                  #
+#                # \____/_/  |_/____/___//____/ CIRES MGG DEV TEAM                #
+#                #*****************************************************************
+#                #*****************************************************************
+#              mode: '000777'
+#              owner: root
+#              group: root
+#            "/etc/cfn/cfn-hup.conf":
+#              content: !Sub |
+#                [main]
+#                stack=${AWS::StackId}
+#                region=${AWS::Region}
+#                interval=5
+#                verbose=true
+#              mode: '000400'
+#              owner: root
+#              group: root
+#            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+#              content: !Sub |
+#                [cfn-auto-reloader-hook]
+#                triggers=post.update
+#                path=Resources.OrchestratorEC2Instance.Metadata.AWS::CloudFormation::Init
+#                action=/opt/aws/bin/cfn-init -v -c update-stack --stack=${AWS::StackName} --region=${AWS::Region} --resource=OrchestratorEC2Instance
+#                runas=root
+#              mode: '000400'
+#              owner: root
+#              group: root
+#          services:
+#            sysvinit:
+#              cfn-hup:
+#                enabled: true
+#                ensureRunning: true
+#                files:
+#                  - '/etc/cfn/cfn-hup.conf'
+#                  - '/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+#        run-update-stack:
+#          commands:
+#            '01':
+#              command: !Sub echo 'updating stack123'
+#            '02':
+#              command: !Sub echo 'updating stack456'
+#    Properties:
+#      AvailabilityZone: !FindInMap [ AWSRegion2AvailabilityZoneName, !Ref "AWS::Region", ZoneName ]
+#      SecurityGroupIds:
+#        - !GetAtt EC2SecurityGroup.GroupId
+#      KeyName: !Ref KeyName
+#      EbsOptimized: false
+#      IamInstanceProfile: !Ref IAMInstanceProfile
+#      ImageId: !FindInMap [ AWSRegionArch2AMI, !Ref "AWS::Region", HVM64 ]
+#      InstanceType: !Ref OrchestratorInstanceType
+#      Tags:
+#        - Key: "project"
+#          Value: "echofish"
+#        - Key: "prefix"
+#          Value: !Ref StackPrefix
+#        - Key: "Name"
+#          Value: "Orchestrator"
+#      DisableApiTermination: 'FALSE'
+#      UserData:
+#        Fn::Base64: !Sub |
+#          #!/bin/bash -xe
+#          dnf update -y && dnf install -y jq htop
+#          #
+#          /opt/aws/bin/cfn-init -v -c default --stack ${AWS::StackName} --region ${AWS::Region} --resource=OrchestratorEC2Instance
+#          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource=OrchestratorEC2Instance
+
+# sudo view /var/log/cfn-init-cmd.log
+#
+#export NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id NOAA_WCSD_ZARR_PDS_BUCKET --query SecretString --output text | jq -r .NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID)
+#export NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id NOAA_WCSD_ZARR_PDS_BUCKET --query SecretString --output text | jq -r .NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY)
+#
