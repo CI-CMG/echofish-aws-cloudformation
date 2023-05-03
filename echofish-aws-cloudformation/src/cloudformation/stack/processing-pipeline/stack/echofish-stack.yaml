@@ -280,6 +280,17 @@ Resources:
                 Resource:
                   #- !Sub "arn:aws:dynamodb:*:*:table/${StackPrefix}-${DynamoDBTableName}"
                   - !Sub "arn:aws:dynamodb:*:*:*"
+        - PolicyName: "ParameterStoreAccess"
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "ssm:PutParameter"
+                  - "ssm:AddTagsToResource"
+                  - "ssm:RemoveTagsFromResource"
+                Resource:
+                  - !Sub "arn:aws:sts:*:*:*"
 
   IAMInstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -319,6 +330,30 @@ Resources:
 #        - Key: "prefix"
 #          Value: !Ref StackPrefix
 #      Timeout: 900
+
+  ### PARAMETER STORE ###
+# TODO: NEED TO ADD PERMISSIONS TO IAM ROLE
+  ParameterStore:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: "echofish"
+      Type: String
+      Value: !Sub |
+        {
+          MY_KEY: "${KeyName}"
+          REGION: "us-east-1",
+          BUCKET_NAME: "noaa-wcsd-pds",
+          INDEX_EK60_TABLE_NAME: "noaa-wcsd-pds-index-ek60",
+          SECRET_NAME: "NOAA_WCSD_ZARR_PDS_BUCKET",
+          WCSD_BUCKET_NAME: "noaa-wcsd-pds",
+          WCSD_ZARR_BUCKET_NAME: "noaa-wcsd-zarr-pds",
+          FILE_SUFFIX: ".raw",
+          OVERWRITE: "False"
+        }
+      Description: SSM Parameter for running date command.
+      AllowedPattern: "^[a-zA-Z]{1,10}$"
+      Tags:
+        Environment: DEV
 
   ### DYNAMO DB ###
   WCSDPDSStatusDynamoDBTableDev:
@@ -370,7 +405,6 @@ Resources:
   ### EC2 INSTANCES ###
   RawToZarrEC2Instance:
     Type: AWS::EC2::Instance
-    #DependsOn: # TODO: there might be a race condition here
     CreationPolicy:
       ResourceSignal:
         Timeout: PT10M
@@ -427,7 +461,7 @@ Resources:
         run-update-stack:
           commands:
             '01':
-              command: !Sub echo 'Stack Updated 121212'
+              command: !Sub echo 'RawToZarrEC2Instance Stack Updated'
     Properties:
       AvailabilityZone: !FindInMap [ AWSRegion2AvailabilityZoneName, !Ref "AWS::Region", ZoneName ]
       SecurityGroupIds:
@@ -456,95 +490,100 @@ Resources:
           /opt/aws/bin/cfn-init -v --configsets default --stack ${AWS::StackName} --region ${AWS::Region} --resource=RawToZarrEC2Instance
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource=RawToZarrEC2Instance
 
-#  OrchestratorEC2Instance:
-#    Type: AWS::EC2::Instance
-#    #DependsOn: # TODO: there might be a race condition here
-#    CreationPolicy:
-#      ResourceSignal:
-#        Timeout: PT10M
-#    Metadata:
-#      AWS::CloudFormation::Init:
-#        configSets:
-#          update-stack:
-#            - run-update-stack
-#          default:
-#            - run-init
-#        run-init:
-#          files:
-#            "/etc/motd":
-#              content: !Sub |
-#                #*****************************************************************
-#                #*****************************************************************
-#                #   / __ \/   | / ___//  _/ ___/                                 #
-#                #  / / / / /| | \__ \ / / \__ \                                  #
-#                # / /_/ / ___ |___/ // / ___/ /                                  #
-#                # \____/_/  |_/____/___//____/ CIRES MGG DEV TEAM                #
-#                #*****************************************************************
-#                #*****************************************************************
-#              mode: '000777'
-#              owner: root
-#              group: root
-#            "/etc/cfn/cfn-hup.conf":
-#              content: !Sub |
-#                [main]
-#                stack=${AWS::StackId}
-#                region=${AWS::Region}
-#                interval=5
-#                verbose=true
-#              mode: '000400'
-#              owner: root
-#              group: root
-#            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
-#              content: !Sub |
-#                [cfn-auto-reloader-hook]
-#                triggers=post.update
-#                path=Resources.OrchestratorEC2Instance.Metadata.AWS::CloudFormation::Init
-#                action=/opt/aws/bin/cfn-init -v -c update-stack --stack=${AWS::StackName} --region=${AWS::Region} --resource=OrchestratorEC2Instance
-#                runas=root
-#              mode: '000400'
-#              owner: root
-#              group: root
-#          services:
-#            sysvinit:
-#              cfn-hup:
-#                enabled: true
-#                ensureRunning: true
-#                files:
-#                  - '/etc/cfn/cfn-hup.conf'
-#                  - '/etc/cfn/hooks.d/cfn-auto-reloader.conf'
-#        run-update-stack:
-#          commands:
-#            '01':
-#              command: !Sub echo 'updating stack123'
-#            '02':
-#              command: !Sub echo 'updating stack456'
-#    Properties:
-#      AvailabilityZone: !FindInMap [ AWSRegion2AvailabilityZoneName, !Ref "AWS::Region", ZoneName ]
-#      SecurityGroupIds:
-#        - !GetAtt EC2SecurityGroup.GroupId
-#      KeyName: !Ref KeyName
-#      EbsOptimized: false
-#      IamInstanceProfile: !Ref IAMInstanceProfile
-#      ImageId: !FindInMap [ AWSRegionArch2AMI, !Ref "AWS::Region", HVM64 ]
-#      InstanceType: !Ref OrchestratorInstanceType
-#      Tags:
-#        - Key: "project"
-#          Value: "echofish"
-#        - Key: "prefix"
-#          Value: !Ref StackPrefix
-#        - Key: "Name"
-#          Value: "Orchestrator"
-#      DisableApiTermination: 'FALSE'
-#      UserData:
-#        Fn::Base64: !Sub |
-#          #!/bin/bash -xe
-#          dnf update -y && dnf install -y jq htop
-#          #
-#          /opt/aws/bin/cfn-init -v -c default --stack ${AWS::StackName} --region ${AWS::Region} --resource=OrchestratorEC2Instance
-#          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource=OrchestratorEC2Instance
+  OrchestratorEC2Instance:
+    Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT10M
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          update-stack:
+            - run-update-stack
+          default:
+            - run-init
+        run-init:
+          files:
+            "/etc/motd":
+              content: !Sub |
+                #*****************************************************************
+                #*****************************************************************
+                #   / __ \/   | / ___//  _/ ___/                                 #
+                #  / / / / /| | \__ \ / / \__ \                                  #
+                # / /_/ / ___ |___/ // / ___/ /                                  #
+                # \____/_/  |_/____/___//____/ CIRES MGG DEV TEAM                #
+                #*****************************************************************
+                #*****************************************************************
+              mode: '000777'
+              owner: root
+              group: root
+            "/etc/cfn/cfn-hup.conf":
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+                interval=5
+                verbose=true
+              mode: '000400'
+              owner: root
+              group: root
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.OrchestratorEC2Instance.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --configsets update-stack --stack=${AWS::StackName} --region=${AWS::Region} --resource=OrchestratorEC2Instance
+                runas=root
+              mode: '000400'
+              owner: root
+              group: root
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                  - '/etc/cfn/cfn-hup.conf'
+                  - '/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+        run-update-stack:
+          commands:
+            '01':
+              command: !Sub echo 'OrchestratorEC2Instance Stack Updated'
+    Properties:
+      AvailabilityZone: !FindInMap [ AWSRegion2AvailabilityZoneName, !Ref "AWS::Region", ZoneName ]
+      SecurityGroupIds:
+        - !GetAtt EC2SecurityGroup.GroupId
+      KeyName: !Ref KeyName
+      EbsOptimized: false
+      IamInstanceProfile: !Ref IAMInstanceProfile
+      ImageId: !FindInMap [ AWSRegionArch2AMI, !Ref "AWS::Region", HVM64 ]
+      InstanceType: !Ref OrchestratorInstanceType
+      Tags:
+        - Key: "project"
+          Value: "echofish"
+        - Key: "prefix"
+          Value: !Ref StackPrefix
+        - Key: "Name"
+          Value: "Orchestrator"
+      DisableApiTermination: 'FALSE'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          dnf update -y && dnf install -y jq htop
+          /opt/aws/bin/cfn-init -v --configsets default --stack ${AWS::StackName} --region ${AWS::Region} --resource=OrchestratorEC2Instance
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource=OrchestratorEC2Instance
 
 # sudo view /var/log/cfn-init-cmd.log
 #
 #export NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id NOAA_WCSD_ZARR_PDS_BUCKET --query SecretString --output text | jq -r .NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID)
 #export NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id NOAA_WCSD_ZARR_PDS_BUCKET --query SecretString --output text | jq -r .NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY)
 #
+
+# Instance metadata:
+# TOKEN=`curl --silent -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600"` && curl --silent -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region
+
+# sudo dnf install amazon-cloudwatch-agent
+# https://raw.githubusercontent.com/awslabs/aws-cloudformation-templates/master/aws/solutions/AmazonCloudWatchAgent/inline/amazon_linux.template
+
+# sudo yum -y install gcc
+# sudo yum install python-devel
