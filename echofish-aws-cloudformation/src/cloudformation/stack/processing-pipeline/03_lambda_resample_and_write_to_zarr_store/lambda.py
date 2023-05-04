@@ -1,72 +1,188 @@
-# https://containers.fan/posts/run-aws-lambda-functions-on-docker/
+#!/usr/bin/env python
 
 import os
-import time
-# import awslambdaric.lambda_context
+import json
+import s3fs
 import boto3
 import logging
-import tempfile
-import echopype as ep
-from botocore import UNSIGNED
-from botocore.client import Config
+import botocore
+import aiobotocore
+from botocore.config import Config
+from botocore.exceptions import ClientError
+import numpy as np
+import xarray as xr
+import pandas as pd
 
-s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
+session = boto3.Session()
+max_pool_connections = 64
+
+TEMP_OUTPUT_BUCKET = "noaa-wcsd-pds-index"
+SECRET_NAME = "NOAA_WCSD_ZARR_PDS_BUCKET"
+
+# aws --profile=echofish --region=us-east-1 secretsmanager get-resource-policy --secret-id="NOAA_WCSD_ZARR_PDS_BUCKET"
+ssm_client = boto3.client('ssm')
+
+client_config = botocore.config.Config(max_pool_connections=max_pool_connections)
+transfer_config = boto3.s3.transfer.TransferConfig(
+    multipart_threshold=8388608 * 2,
+    max_concurrency=10,
+    multipart_chunksize=8388608 * 2,
+    num_download_attempts=5,
+    max_io_queue=100,
+    io_chunksize=262144,
+    use_threads=True,
+    max_bandwidth=None
+)
+
+s3 = session.client(service_name='s3', config=client_config)  # good
+s3_resource = session.resource(service_name='s3')  # bad
+
+WCSD_BUCKET_NAME = 'noaa-wcsd-pds'
+WCSD_ZARR_BUCKET_NAME = 'noaa-wcsd-zarr-pds'
+OVERWRITE = False  # If True will delete existing Zarr Store
+TILE_SIZE = 1024  # TODO: GET FROM UPSTREAM
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-# TODO: get input bucket, input key
-# get output bucket, output key
-# output: zarr width: start date, end date
-# output: Need min and max depths!
 
-"""
-event: type: <class 'dict'>
-context: type: <class 'awslambdaric.lambda_context.LambdaContext'>
-"""
-my_session = boto3.session.Session()
-my_region = my_session.region_name
-
-TEMPDIR = tempfile.gettempdir()
-session = boto3.Session(region_name="us-east-1")  # remove for lambda
-dynamodb = session.client('dynamodb')
-# table_name = dynamodb.list_tables()['TableNames'][0]
-table_name = "echofish-noaa-wcsd-pds"
-
-
-def writeToDynamoDB(
-        key='data/raw/Henry_B._Bigelow/HB20ORT/EK60/D20201002-T205446EEEE.raw',
-        cruise="",
-        date="",
-        size="",
-        width=""
-):
-    # dynamodb = boto3.client('dynamodb')
-    #
-    session = boto3.Session(region_name="us-east-1")  # remove for lambda
-    dynamodb = session.client('dynamodb')
-    table_name = dynamodb.list_tables()['TableNames'][0]
+def get_secret(secret_name: str) -> dict:
+    # secret_name = "NOAA_WCSD_ZARR_PDS_BUCKET"  # TODO: parameterize
+    secretsmanager_client = session.client(service_name='secretsmanager')
+    try:
+        get_secret_value_response = secretsmanager_client.get_secret_value(SecretId=secret_name)
+        return json.loads(get_secret_value_response['SecretString'])
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            print("The requested secret " + secret_name + " was not found")
+        elif e.response['Error']['Code'] == 'InvalidRequestException':
+            print("The request was invalid due to:", e)
+        elif e.response['Error']['Code'] == 'InvalidParameterException':
+            print("The request had invalid params:", e)
+        elif e.response['Error']['Code'] == 'DecryptionFailure':
+            print("The requested secret can't be decrypted using the provided KMS key:", e)
+        elif e.response['Error']['Code'] == 'InternalServiceError':
+            print("An error occurred on service side:", e)
 
 
-status_code = dynamodb.put_item(
-    TableName=table_name,
-    Item={
-        'KEY': {'S': 'data/raw/Henry_B._Bigelow/HB20ORT/EK60/D20201002-T205446EEEE.raw'},
-        'CRUISE': {'S': 'HB20ORTEEE'},
-        'DATE': {'S': '2001-01-01T01:01:01ZEEEE'},
-        'SIZE': {'N': '22'},
-        'WIDTH': {'N': '33'},
-    }
+def get_cruise_df() -> pd.DataFrame:
+    # Returns df composed of:
+    # [ 'PIPELINE_TIME', 'ZARR_BUCKET', 'START_TIME', 'MAX_ECHO_RANGE',
+    #  'PIPELINE_STATUS', 'NUM_ECHO_RANGE', 'ZARR_PATH', 'MIN_ECHO_RANGE',
+    #  'END_TIME', 'FILENAME', 'NUM_CHANNEL', 'NUM_PING_TIME', 'CHANNELS' ]
+    dynamodb = session.resource(service_name='dynamodb')
+    ship_name = 'Henry_B._Bigelow'  # TODO: PASS IN
+    cruise_name = 'HB0707'  # TODO: PASS IN
+    sensor_name = 'EK60'  # TODO: PASS IN
+    table_name = f"{ship_name}_{cruise_name}_{sensor_name}"
+    table = dynamodb.Table(table_name)
+    response = table.scan()  # Scan has 1 MB limit on results --> requires pagination
+    data = response['Items']
+    while 'LastEvaluatedKey' in response:
+        response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+        data.extend(response['Items'])
+    # df = pd.DataFrame(data)
+    return pd.DataFrame(data)
+
+
+test_file = "D20070712-T033431.raw"  # TODO: UPDATE THIS!!!!
+
+# [0] get dynamoDB table info ####################################
+df = get_cruise_df()
+start_file_index = df.index[df['FILENAME'] == test_file][0]
+start_ping_time_index = int(np.cumsum(df['NUM_PING_TIME'])[start_file_index])
+
+# [1] read cruise level zarr store using xarray for writing ####################################
+session = botocore.session.Session()
+session = aiobotocore.session.AioSession(profile='echofish')
+# s3 = session.client(service_name='s3', config=client_config)  # good
+s3 = s3fs.S3FileSystem(session=session)
+# s3 = s3fs.S3FileSystem(anon=True)
+store = s3fs.S3Map(
+    root='s3://noaa-wcsd-pds-index/data/processed/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr',
+    s3=s3,
+    check=False
 )
-item = dynamodb.get_item(
-    TableName=table_name,
-    Key={
-        'KEY': {'S': 'data/raw/Henry_B._Bigelow/HB20ORT/EK60/D20201002-T205446.raw'},
-        'CRUISE': {'S': 'HB20ORT'}
-    }
+ds_cruise = xr.open_zarr(store=store, consolidated=True)  # <- cruise level zarr store
+
+# [2] read file level zarr store ####################################
+# s3 = s3fs.S3FileSystem(anon=True)
+WCSD_ZARR_BUCKET_NAME = 'noaa-wcsd-zarr-pds'
+store = s3fs.S3Map(
+    root=f's3://{WCSD_ZARR_BUCKET_NAME}/data/raw/Henry_B._Bigelow/HB0707/EK60/{os.path.splitext(os.path.basename(test_file))[0]}.zarr',
+    s3=s3,
+    check=False
 )
-print(item)
+ds_file = xr.open_zarr(store=store, consolidated=True)  # <- file level zarr store
+# TODO: PROBLEM, ds_file is missing latitude/longitude/timestamp information
+
+
+# [2] extract gps and time coordinate from file level zarr store ####################################
+# use this: https://osoceanacoustics.github.io/echopype-examples/echopype_tour.html
+
+
+# [3] extract needed variables ####################################
+
+# [4] regrid data array ####################################
+
+# [5] write subset of data to the larger zarr store ####################################
+
+
+# https://github.com/oftfrfbf/watercolumn/blob/8b7ed605d22f446e1d1f3087971c31b83f1b5f4c/scripts/scan_watercolumn_bucket_by_size.py#L138
+
+total_width_traversed = 0
+
+# TODO: CHANGE BUCKET BACK TO THE ORIGINAL!
+WCSD_ZARR_BUCKET_NAME = "noaa-wcsd-pds-index"  # 'noaa-wcsd-zarr-pds'
+
+# read from this zarr store
+ship_name = 'Henry_B._Bigelow'
+cruise_name = 'HB0707'
+sensor_name = 'EK60'
+filename = 'D20070711-T182032.zarr'
+store_name = os.path.join(WCSD_ZARR_BUCKET_NAME, 'data', 'raw', ship_name, cruise_name, sensor, filename)
+store_name = 'noaa-wcsd-zarr-pds/data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
+import fsspec
+
+fs = fsspec.filesystem('s3')
+fs.glob(f's3://{store_name}')
+ds_temp = xr.open_zarr(store=fsspec.get_mapper(store_name), consolidated=True)
+
+width = ds_temp.data.shape[1]
+height = ds_temp.data.shape[0]
+start_index = total_width_traversed  # start_index
+end_index = total_width_traversed + width  # end_index
+print(
+    f"width: {width},"
+    f"height: {height},"
+    f"total_width_traversed: {total_width_traversed},"
+    f"s: {start_index}, e: {end_index}"
+)
+z_resample.latitude[start_index:end_index] = np.round(ds_temp.latitude.values, 5)  # round
+z_resample.longitude[start_index:end_index] = np.round(ds_temp.longitude.values, 5)
+z_resample.time[start_index:end_index] = ds_temp.time.values.astype(np.int64) / 1e9
+total_width_traversed += width
+frequencies = ds_temp.frequency.values  # overwriting each time :(
+# np.min(ds_temp.range_stop.values) / len(ds_temp.range_bin.values) # 10 cm for AL0502, 50 cm for GU1002,
+for freq in range(len(frequencies)):
+    for i in range(width):  # 696120
+        print(f'{i} of {width} in frequency: {freq}')
+        current_data = ds_temp.data.values[:, i, freq]
+        current_depth = np.nanmax(ds_temp.range_stop[i])
+        # meters_per_pixel = current_depth / 1000 # 2.19
+        y = current_data
+        x = np.linspace(0, np.ceil(current_depth), num=len(y), endpoint=True)
+        f = interp1d(x, y, kind='previous')
+        xnew = np.linspace(minimum_resolution, x[-1], num=int(np.ceil(current_depth / minimum_resolution)),
+                           endpoint=True)
+        ynew = f(xnew)
+        ynewHeight = ynew.shape[0]
+        # write to zarr w resampled data
+        z_resample.data[:ynewHeight, start_index + i, freq] = np.round(ynew, 2)
+
+
+#### BELOW IS CONSOLIDATED FROM PREVIOUS PROJECT ####
 
 
 # def handler(event: dict, context: awslambdaric.lambda_context.LambdaContext) -> dict:
