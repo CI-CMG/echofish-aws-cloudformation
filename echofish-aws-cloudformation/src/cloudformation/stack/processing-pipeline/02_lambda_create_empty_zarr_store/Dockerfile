@@ -1,4 +1,3 @@
-
 # https://gallery.ecr.aws/lambda/python
 FROM public.ecr.aws/lambda/python:3.9-arm64
 
