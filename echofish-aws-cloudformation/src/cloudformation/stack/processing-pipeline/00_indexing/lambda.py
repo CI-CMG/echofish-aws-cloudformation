@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 """
 Bucket: https://ncei-wcsd-archive.s3.amazonaws.com/index.html
 Duration 578579.80 ms --> 9.6 minutes
@@ -26,7 +27,6 @@ import boto3
 # import logging
 import numpy as np
 import botocore
-from botocore.config import Config
 import pandas as pd
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
@@ -284,7 +284,7 @@ def main():
     print(end)
 
 
-def handler(event, context):
+def handler(event: dict, context: dict) -> dict:
     print(f"total cpus: {os.cpu_count()}")
     main()
     print('done')

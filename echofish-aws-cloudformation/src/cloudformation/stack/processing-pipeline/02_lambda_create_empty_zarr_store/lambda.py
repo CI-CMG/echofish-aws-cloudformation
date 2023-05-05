@@ -3,18 +3,17 @@
 import os
 import json
 import boto3
+import shutil
 import botocore
-import numpy as np
-from datetime import datetime
 from botocore.config import Config
 from botocore.exceptions import ClientError
-
 import numpy as np
-import xarray as xr
 from numcodecs import Blosc
 import zarr
-
 import pandas as pd
+from enum import Enum
+
+ENV = Enum("ENV", ["DEV", "PROD"])
 
 # aws --profile=echofish --region=us-east-1 secretsmanager get-resource-policy --secret-id="NOAA_WCSD_ZARR_PDS_BUCKET"
 # client = boto3.client('ssm')
@@ -22,13 +21,12 @@ import pandas as pd
 session = boto3.Session()
 max_pool_connections = 64
 SECRET_NAME = "NOAA_WCSD_ZARR_PDS_BUCKET"
-
-TEMP_OUTPUT_BUCKET = "noaa-wcsd-pds-index"
+PREFIX = 'RUDY'
 
 client_config = botocore.config.Config(max_pool_connections=max_pool_connections)
 transfer_config = boto3.s3.transfer.TransferConfig(
     multipart_threshold=8388608 * 2,
-    max_concurrency=10,
+    max_concurrency=100,
     multipart_chunksize=8388608 * 2,
     num_download_attempts=5,
     max_io_queue=100,
@@ -38,13 +36,11 @@ transfer_config = boto3.s3.transfer.TransferConfig(
 )
 
 s3 = session.client(service_name='s3', config=client_config)  # good
-s3_resource = session.resource(service_name='s3')  # bad
+#s3_resource = session.resource(service_name='s3')  # bad
 
 WCSD_BUCKET_NAME = 'noaa-wcsd-pds'
-WCSD_ZARR_BUCKET_NAME = 'noaa-wcsd-zarr-pds'
 OVERWRITE = True  # If True will delete existing Zarr Store
 TILE_SIZE = 1024
-
 
 def upload_files(
         local_directory: str,
@@ -90,154 +86,222 @@ def get_secret(secret_name: str) -> dict:
             print("An error occurred on service side:", e)
 
 
-# ds_Sv.echo_range.values.shape
-# np.where(np.max(foo) == np.nanmax(ds_Sv.echo_range.values, axis=(0, 2)))
+def find_child_objects(bucket_name: str, sub_prefix: str) -> list:
+    # Find all objects for a given prefix string.
+    # Returns list of strings.
+    paginator = s3.get_paginator('list_objects_v2')
+    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=sub_prefix)
+    objects = []
+    for page in page_iterator:
+        objects.extend(page['Contents'])
+    return objects
 
-def main(cruise: str, sensor: str, ship: str):
-    # This function will run once per cruise. It should read in all the individual zarr store
-    # information and create a single larger store (empty) that will later be written to.
-    # [0] Read dyanmodb
-    dynamodb = session.resource(service_name='dynamodb')
-    ship_name = 'Henry_B._Bigelow'
-    cruise_name = 'HB0707'
-    sensor_name = 'EK60'
-    table_name = f"{ship_name}_{cruise_name}_{sensor_name}"
-    table = dynamodb.Table(table_name)
-    response = table.scan()  # Scan has 1 MB limit on results --> paginate
-    data = response['Items']
-    while 'LastEvaluatedKey' in response:
-        response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
-        data.extend(response['Items'])
 
-    df = pd.DataFrame(data)
+def get_raw_files(bucket_name: str, sub_prefix: str, file_suffix: str = None) -> list:
+    # Get all children files. Optionally defined by file_suffix.
+    # Returns empty list if none are found or error encountered.
+    print('Getting raw files')
+    raw_files = []
+    try:
+        children = find_child_objects(bucket_name=bucket_name, sub_prefix=sub_prefix)
+        if file_suffix is None:
+            raw_files = children
+        else:
+            for i in children:
+                # Note any files with predicate 'NOISE' are to be ignored, see: "Bell_M._Shimada/SH1507"
+                if i['Key'].endswith(file_suffix) and not os.path.basename(i['Key']).startswith('NOISE'):
+                    raw_files.append(i['Key'])
+            return raw_files
+    except:
+        print("Some problem was encountered.")
+    finally:
+        return raw_files
 
-    # [0.5] if overwrite is true, delete any existing Zarr store --> DANGEROUS!
 
-    # [1] determine which files were successes and which failed
-    df_success = df[df['PIPELINE_STATUS'] == 'SUCCESS']  # TODO: Change this keyword to 'SUCCESS'
-    if df_success.shape[0] == 0:  # iff no successes then nothing to do
-        raise
-
-    # ['PIPELINE_TIME', 'ZARR_BUCKET', 'START_TIME', 'MAX_ECHO_RANGE',
-    # 'PIPELINE_STATUS', 'NUM_ECHO_RANGE', 'ZARR_PATH', 'MIN_ECHO_RANGE',
-    # 'END_TIME', 'FILENAME', 'NUM_CHANNEL', 'NUM_PING_TIME', 'CHANNELS'] # TODO: remove NUM_CHANNEL
-
-    # [2] manifest of files determines width of new zarr store
-    consolidated_zarr_channels = list(set([item for sublist in df_success['CHANNELS'].tolist() for item in sublist]))
-    consolidated_zarr_channels.sort()
-    # Note: This values removes missing lat/lon coordinates
-    consolidated_zarr_width = np.sum(df_success['NUM_PING_TIME_DROPNA'].astype(int))
-
-    # [3] calculate the max/min measurement resolutions for the whole cruise
-    cruise_min_echo_range = np.min(df_success['MIN_ECHO_RANGE'].astype(float))  # minimum resolution
-
-    # [4] calculate the largest depth value
-    cruise_max_echo_range = np.max(df_success['MAX_ECHO_RANGE'].astype(float))
-
-    # [5] get number of channels
-    cruise_channels = consolidated_zarr_channels
-    cruise_frequencies = [float(i) for i in df_success['FREQUENCIES'][0]]
-
-    # [6] create new zarr store the full size needed in data/processed/ directory
-    # new_height = int(np.ceil(cruise_max_echo_range / cruise_min_echo_range / tile_size) * tile_size)  # 8192
-    new_height = int(np.ceil(cruise_max_echo_range) / cruise_min_echo_range)
-    new_width = consolidated_zarr_width  # int(np.ceil(total_width / tile_size) * tile_size)  # 5120
-    # new_width = int(np.ceil(total_width / tile_size) * tile_size)  # 5120
-    new_channels = len(cruise_channels)
-    # ...starting at line 282
-
-    #########################################
+def create_zarr_store(
+        store_name: str,
+        width: int,
+        height: int,
+        min_echo_range: float,
+        channel: list,
+        frequency: list,
+) -> None:
+    # Creates an empty Zarr store
     compressor = Blosc(cname="zstd", clevel=5, shuffle=Blosc.BITSHUFFLE)
-    store = zarr.DirectoryStore(path=f'{cruise_name}.zarr')  # TODO: move to s3 (authenticated)...
+    store = zarr.DirectoryStore(path=store_name)  # TODO: write directly to s3?
     root = zarr.group(store=store, path="/", overwrite=True)
     args = {'compressor': compressor, 'fill_value': np.nan}
-
-    root.create_dataset(name="/time", shape=new_width, chunks=TILE_SIZE, dtype='float32', **args)
+    # Coordinate: Time
+    root.create_dataset(name="/time", shape=width, chunks=TILE_SIZE, dtype='float32', **args)
     root.time.attrs['_ARRAY_DIMENSIONS'] = ['time']
-
-    root.create_dataset(name="/latitude", shape=new_width, chunks=TILE_SIZE, dtype='float32', **args)
-    root.latitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
-
-    root.create_dataset(name="/longitude", shape=new_width, chunks=TILE_SIZE, dtype='float32', **args)
-    root.longitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
-
-    root.create_dataset(name="/depth", shape=new_height, chunks=TILE_SIZE, dtype='float32', **args)
+    # Coordinate: Depth
+    root.create_dataset(name="/depth", shape=height, chunks=TILE_SIZE, dtype='float32', **args)
     root.depth.attrs['_ARRAY_DIMENSIONS'] = ['depth']
-    root.depth[:] = np.round(np.linspace(start=0, stop=cruise_min_echo_range * new_height, num=new_height),
-                             2)  # starts at zero
-
-    # echodata.platform.channel
-    root.create_dataset(name="/channel", shape=new_channels, chunks=1, dtype='str', **args)
+    root.depth[:] = np.round(
+        np.linspace(start=0, stop=min_echo_range * height, num=height),
+        decimals=2
+    )  # Note: "depth" starts at zero
+    # Coordinates: Channel
+    root.create_dataset(name="/channel", shape=len(channel), chunks=1, dtype='str', **args)
     root.channel.attrs['_ARRAY_DIMENSIONS'] = ['channel']
-    root.channel[:] = cruise_channels
-
-    # echodata.platform.frequency_nominal.values = [18000., 38000., 120000., 200000.]
-    new_frequencies = np.asarray([18000., 38000., 120000., 200000.])
-    root.create_dataset(name="/frequency", shape=len(new_frequencies), chunks=1, dtype='float32', **args)
+    root.channel[:] = channel
+    # Latitude
+    root.create_dataset(name="/latitude", shape=width, chunks=TILE_SIZE, dtype='float32', **args)
+    root.latitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
+    # Longitude
+    root.create_dataset(name="/longitude", shape=width, chunks=TILE_SIZE, dtype='float32', **args)
+    root.longitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
+    # Frequency
+    root.create_dataset(name="/frequency", shape=len(frequency), chunks=1, dtype='float32', **args)
     root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['channel']
-    root.frequency[:] = new_frequencies
-    #
-    root.create_dataset(name="/data", shape=(new_height, new_width, new_channels), chunks=(TILE_SIZE, TILE_SIZE, 1),
-                        **args)
+    root.frequency[:] = frequency
+    # Data
+    root.create_dataset(
+        name="/data",
+        shape=(height, width, len(channel)),
+        chunks=(TILE_SIZE, TILE_SIZE, 1),
+        **args
+    )
     root.data.attrs['_ARRAY_DIMENSIONS'] = ['depth', 'time', 'channel']
-    root.attrs["ship"] = ship_name
-    root.attrs["cruise"] = cruise_name;  # sorted(root.attrs); root.data[:]
-    # TODO: add transducer type >> look for Gavin's explanatino on github issues
-    zarr.consolidate_metadata(store)  # TODO: add metadata from echopype conversion
-    ####################################
-
-    ### TEST ###
+    # TODO: add metadata from echopype conversion
+    zarr.consolidate_metadata(store)
     # foo = xr.open_zarr(f'{cruise_name}.zarr')
 
-    # [7] write to s3 bucket
-    secret = get_secret(secret_name=SECRET_NAME)
-    s3_zarr_client = boto3.client(
-        service_name='s3',
-        # aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
-        # aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
-    )
-    zarr_directory = f"{cruise_name}.zarr"
-    # zarr_prefix = os.path.join("data", "raw", ship, cruise, sensor)
-    # zarr_path = data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T231759.zarr
+def get_table_as_dataframe(
+        prefix: str,
+        ship_name: str,
+        cruise_name: str,
+        sensor_name: str,
+) -> pd.DataFrame:
+    dynamodb = session.resource(service_name='dynamodb')
+    try:
+        table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
+        table = dynamodb.Table(table_name)
+        response = table.scan()  # Scan has 1 MB limit on results --> paginate
+        data = response['Items']
+        while 'LastEvaluatedKey' in response:
+            response = table.scan(ExclusiveStartKey=response['LastEvaluatedKey'])
+            data.extend(response['Items'])
+    except ClientError as err:
+        print('Problem finding the dynamodb table')
+        raise err
+    df = pd.DataFrame(data)
+    df_success = df[df['PIPELINE_STATUS'] == 'SUCCESS']
+    if df_success.shape[0] == 0:
+        raise
+    return df_success
 
+
+def main(
+        environment: str='DEV',
+        prefix: str='rudy',
+        ship_name: str='Henry_B._Bigelow',
+        cruise_name: str='HB0707',
+        sensor_name: str='EK60'
+) -> None:
+    #################################################################
+    if ENV[environment] is ENV.PROD:
+        OUTPUT_BUCKET = 'noaa-wcsd-zarr-pds'
+    else:
+        OUTPUT_BUCKET = "noaa-wcsd-pds-index"
+    #
+    df = get_table_as_dataframe(prefix=prefix, ship_name=ship_name, cruise_name=cruise_name, sensor_name=sensor_name)
+    #################################################################
+    # [2] manifest of files determines width of new zarr store
+    cruise_channels = list(set([item for sublist in df['CHANNELS'].tolist() for item in sublist]))
+    cruise_channels.sort()
+    # Note: This values excludes nan coordinates
+    consolidated_zarr_width = np.sum(df['NUM_PING_TIME_DROPNA'].astype(int))
+    # [3] calculate the max/min measurement resolutions for the whole cruise
+    cruise_min_echo_range = float(np.min(df['MIN_ECHO_RANGE'].astype(float)))
+    # [4] calculate the largest depth value
+    cruise_max_echo_range = float(np.max(df['MAX_ECHO_RANGE'].astype(float)))
+    # [5] get number of channels
+    cruise_frequencies = [float(i) for i in df['FREQUENCIES'][0]]
+    # new_height = int(np.ceil(cruise_max_echo_range / cruise_min_echo_range / tile_size) * tile_size)
+    new_height = int(np.ceil(cruise_max_echo_range) / cruise_min_echo_range)
+    # new_width = int(np.ceil(total_width / tile_size) * tile_size)
+    new_width = int(consolidated_zarr_width)
+    #################################################################
+    if ENV[environment] is ENV.PROD:
+        store_name = f"{cruise_name}.zarr"
+    else:
+        store_name = f"{prefix}_{cruise_name}.zarr"
+    #################################################################
+    if os.path.exists(store_name):
+        print(f'Removing local zarr directory: {store_name}')
+        shutil.rmtree(store_name)
+    #################################################################
+    create_zarr_store(
+        store_name=store_name,
+        width=new_width,
+        height=new_height,
+        min_echo_range=cruise_min_echo_range,
+        channel=cruise_channels,
+        frequency=cruise_frequencies
+    )
+    #################################################################
+    if ENV[environment] is ENV.PROD:
+        # If PROD write to noaa-wcsd-zarr-pds bucket
+        secret = get_secret(secret_name=SECRET_NAME)
+        s3_zarr_client = boto3.client(
+            service_name='s3',
+            aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
+            aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
+        )
+    else:
+        # If DEV write to dev bucket
+        s3_zarr_client = boto3.client(service_name='s3')
+    #################################################################
     zarr_prefix = os.path.join("data", "processed", ship_name, cruise_name, sensor_name)
     upload_files(
-        local_directory=zarr_directory,
-        bucket=TEMP_OUTPUT_BUCKET,  # WCSD_ZARR_BUCKET_NAME # TODO: CHANGE BACK!!!!
-        object_prefix=zarr_prefix,  # TODO: write back to same folder as read, EK60
+        local_directory=store_name,
+        bucket=OUTPUT_BUCKET,
+        object_prefix=zarr_prefix,
         s3_client=s3_zarr_client
     )
-    # [8] Empty Zarr store has now been uploaded to s3
-    # TODO: verify count of files uploaded
+    # Verify count of the files uploaded
+    count = 0
+    for subdir, dirs, files in os.walk(store_name):
+        count += len(files)
+    raw_zarr_files = get_raw_files(
+        bucket_name=OUTPUT_BUCKET,
+        sub_prefix=os.path.join(zarr_prefix, store_name)
+    )
+    if len(raw_zarr_files) != count:
+        print(f'Problem writing {store_name} with proper count {count}.')
+        raise
+    if os.path.exists(store_name):
+        print(f'Removing local zarr directory: {store_name}')
+        shutil.rmtree(store_name)
+    #
+    print('done')
+    #################################################################
 
 
-#### TO TEST ZARR STORE IN S3 ####
-import s3fs
+def lambda_handler(event: dict, context: dict) -> dict:
+    main(
+        environment=os.environ['ENV'],  # DEV or TEST
+        prefix=os.environ['PREFIX'],    # unique to each cloudformation deployment
+        ship_name=os.environ['SHIP'],
+        cruise_name=os.environ['CRUISE'],
+        sensor_name=os.environ['SENSOR']
+    )
 
-s3 = s3fs.S3FileSystem(anon=True)
-store = s3fs.S3Map(
-    root='s3://noaa-wcsd-pds-index/data/processed/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr',
-    s3=s3,
-    check=False
-)
-dstest = xr.open_zarr(store=store, consolidated=True)
-##################################
-
-if __name__ == '__main__':
-    main()
-
-
-def lambda_handler(event, context):
-    # json_region = os.environ['AWS_REGION']
-    # print("Processing bucket: {event['bucket']}, key: {event['key']}.")
-    # message = "Processing bucket: {event['bucket']}, key: {event['key']}."
-    # return {'message': message}
-    main()
 
 # Zarr consolidated write reference:
 # https://github.com/oftfrfbf/watercolumn/blob/8b7ed605d22f446e1d1f3087971c31b83f1b5f4c/scripts/scan_watercolumn_bucket_by_size.py
 
-
+# #### TO TEST ZARR STORE IN S3 ####
+# import s3fs
+# s3 = s3fs.S3FileSystem(anon=True)
+# store = s3fs.S3Map(root=f's3://{OUTPUT_BUCKET}/data/processed/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr', s3=s3, check=False)
+# dstest = xr.open_zarr(store=store, consolidated=True)
+## Persistence mode: 'r' means read only (must exist); 'r+' means read/write (must exist); 'a' means read/write (create if doesn't exist); 'w' means create (overwrite if exists); 'w-' means create
+# z = zarr.open(store, mode="r+") # 'r+' means read/write (must exist)
+# z.sv[...]
+# type(z.sv)
+# ##################################
 
 """
 docker build -f Dockerfile -t my-local-lambda:v1 . --no-cache

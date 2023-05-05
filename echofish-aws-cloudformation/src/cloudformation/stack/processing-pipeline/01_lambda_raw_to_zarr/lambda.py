@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 
 
-# TODO: Ensure you don't process NOISE files somehow
-
-
 import os
 import json
 import shutil
@@ -16,15 +13,19 @@ import geopandas as gpd
 from datetime import datetime
 from botocore.config import Config
 from botocore.exceptions import ClientError
+from enum import Enum
+
+ENV = Enum("ENV", ["DEV", "PROD"])
 
 session = boto3.Session()
 max_pool_connections = 64
 secret_name = "NOAA_WCSD_ZARR_PDS_BUCKET"
+SECRET_NAME = "NOAA_WCSD_ZARR_PDS_BUCKET"
 
 client_config = botocore.config.Config(max_pool_connections=max_pool_connections)
 transfer_config = boto3.s3.transfer.TransferConfig(
     multipart_threshold=8388608 * 2,
-    max_concurrency=10,
+    max_concurrency=100,
     multipart_chunksize=8388608 * 2,
     num_download_attempts=5,
     max_io_queue=100,
@@ -34,12 +35,12 @@ transfer_config = boto3.s3.transfer.TransferConfig(
 )
 
 s3 = session.client(service_name='s3', config=client_config)  # good
-s3_resource = session.resource(service_name='s3')  # bad
-WCSD_BUCKET_NAME = 'noaa-wcsd-pds'
-WCSD_ZARR_BUCKET_NAME = 'noaa-wcsd-zarr-pds'
+#s3_resource = session.resource(service_name='s3')  # bad
+#WCSD_BUCKET_NAME = 'noaa-wcsd-pds'
+#WCSD_ZARR_BUCKET_NAME = 'noaa-wcsd-zarr-pds'
 FILE_SUFFIX = '.raw'
-OVERWRITE = False
-SIMPLIFICATION_TOLERANCE = 0.001
+OVERWRITE = True
+# SIMPLIFICATION_TOLERANCE = 0.001
 
 
 def chunks(ll, n):
@@ -108,6 +109,7 @@ def upload_files(
             print(local_path)
             s3_key = os.path.join(object_prefix, local_path)
             try:
+                # s3 = session.client(service_name='s3', config=client_config)
                 s3_client.upload_file(
                     Filename=local_path,
                     Bucket=bucket,
@@ -125,7 +127,7 @@ def get_raw_files(
         file_suffix: str = None
 ) -> list:
     # Get all children files. Optionally defined by file_suffix.
-    # Returns [] if none are found or error encountered.
+    # Returns empty list if none are found or error encountered.
     print('Getting raw files')
     raw_files = []
     try:
@@ -138,8 +140,8 @@ def get_raw_files(
                 if i['Key'].endswith(file_suffix) and not os.path.basename(i['Key']).startswith('NOISE'):
                     raw_files.append(i['Key'])
             return raw_files
-    except:
-        print("Some problem was encountered.")
+    except ClientError as err:
+        print(f"Some problem was encountered: {err}")
     finally:
         return raw_files
 
@@ -147,13 +149,13 @@ def get_raw_files(
 ########################################
 ### TEMPORARY — MOVE TO ORCHESTRATOR ###
 def create_table(
-        ship: str,
-        cruise: str,
-        sensor: str,
-        # table_name: str = CRUISE_TABLE_NAME  # 'noaa-wcsd-pds-cruise-ek60'
+        prefix: str,
+        ship_name: str,
+        cruise_name: str,
+        sensor_name: str,
 ) -> None:
     dynamodb = session.client(service_name='dynamodb')
-    table_name = f"{ship}_{cruise}_{sensor}"
+    table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
     params = {
         'TableName': table_name,
         'KeySchema': [
@@ -178,6 +180,7 @@ def create_table(
         ],
     }
     # TODO: create_table returns a dict for validation
+    print('Creating table...')
     dynamodb.create_table(**params)
     waiter = dynamodb.get_waiter('table_exists')
     waiter.wait(TableName=table_name)
@@ -185,6 +188,7 @@ def create_table(
 
 
 def write_to_table(
+        prefix: str,
         cruise_name: str,
         sensor_name: str,
         ship_name: str,
@@ -193,9 +197,6 @@ def write_to_table(
         zarr_path: str,
         min_echo_range: float,
         max_echo_range: float,
-        num_echo_range: int,
-        num_channel: int,
-        num_ping_time: int,
         num_ping_time_dropna: int,
         start_time: str,
         end_time: str,
@@ -203,21 +204,15 @@ def write_to_table(
         channels: list,
 ) -> None:
     dynamodb = session.client(service_name='dynamodb')
-    table_name = f"{ship_name}_{cruise_name}_{sensor_name}"
-    dynamodb.put_item(  # TODO: verify status_code['ResponseMetadata']['HTTPStatusCode'] == 200
+    table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
+    response = dynamodb.put_item(  # TODO: verify status_code['ResponseMetadata']['HTTPStatusCode'] == 200
         TableName=table_name,
         Item={
-            # 'CRUISE': {'S': cruise_name},
-            # 'SENSOR': {'S': sensor_name},
-            # 'SHIP': {'S': ship_name},
             'FILENAME': {'S': filename},
             'ZARR_BUCKET': {'S': zarr_bucket},
             'ZARR_PATH': {'S': zarr_path},
             'MIN_ECHO_RANGE': {'N': str(np.round(min_echo_range, 4))},
             'MAX_ECHO_RANGE': {'N': str(np.round(max_echo_range, 4))},
-            'NUM_ECHO_RANGE': {'N': str(num_echo_range)},
-            'NUM_CHANNEL': {'N': str(num_channel)},
-            'NUM_PING_TIME': {'N': str(num_ping_time)},
             'NUM_PING_TIME_DROPNA': {'N': str(num_ping_time_dropna)},
             'START_TIME': {'S': start_time},
             'END_TIME': {'S': end_time},
@@ -234,39 +229,60 @@ def write_to_table(
 # num_channel = ds_Sv.channel.shape[0]
 # num_ping_time = ds_Sv.ping_time.shape[0]
 
-def main(sub_prefix="data/raw/Henry_B._Bigelow/HB0707/EK60/"):
-    # children = find_child_objects(bucket_name=WCSD_BUCKET_NAME, sub_prefix="data/raw/Okeanos_Explorer/EX1608/EK60/")
-    # children = find_child_objects(bucket_name=WCSD_BUCKET_NAME, sub_prefix="data/raw/Henry_B._Bigelow/HB0707/EK60/")
+def main(
+        #
+        environment: str='DEV',
+        prefix: str='rudy',
+        ship_name: str='Henry_B._Bigelow',
+        cruise_name: str='HB0707',
+        sensor_name: str='EK60'
+) -> None:
+    #################################################################
+    if ENV[environment] is ENV.PROD:
+        INPUT_BUCKET = "noaa-wcsd-zarr-pds"
+        OUTPUT_BUCKET = "noaa-wcsd-zarr-pds"
+    else:
+        INPUT_BUCKET = "noaa-wcsd-pds"
+        OUTPUT_BUCKET = "noaa-wcsd-pds-index"
+    #################################################################
+    sub_prefix=f"data/raw/{ship_name}/{cruise_name}/{sensor_name}/"
     raw_files = get_raw_files(
-        bucket_name=WCSD_BUCKET_NAME,
+        bucket_name=INPUT_BUCKET,
         sub_prefix=sub_prefix,
         file_suffix=FILE_SUFFIX,
     )
     # TODO: don't need to loop, process single file at time
     for raw_file in raw_files:
         print(raw_file)
-        # E.g.: { 'raw_file': 'data/raw/Okeanos_Explorer/EX1608/EK60/EX1608_EK60-D20161205-T040300.raw' }
-        # raw_file = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.raw'
-        # raw_file = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T033431.raw'
         row_split = raw_file.split(os.sep)
         ship, cruise, sensor, filename = row_split[-4:]  # 'Okeanos_Explorer', 'EX1608', 'EK60'
         zarr_prefix = os.path.join("data", "raw", ship, cruise, sensor)
-        zarr_directory = f"{os.path.splitext(filename)[0]}.zarr"
+        #################################################################
+        if ENV[environment] is ENV.PROD:
+            store_name = f"{os.path.splitext(filename)[0]}.zarr"
+        else:
+            store_name = f"{prefix}_{os.path.splitext(filename)[0]}.zarr"
+        #################################################################
+        #zarr_directory = f"{os.path.splitext(filename)[0]}.zarr"
+        #
         # Check if Zarr store already exists in the destination bucket
         # total_objects = s3.list_objects_v2(
         #     Bucket=WCSD_ZARR_BUCKET_NAME,
-        #     Prefix=os.path.join(zarr_prefix, zarr_directory)
+        #     Prefix=os.path.join(zarr_prefix, store_name)
         # )['KeyCount']
         # if total_objects > 0:
-        #     print(f'objects: {zarr_directory} already exist in {WCSD_ZARR_BUCKET_NAME}.')
+        #     print(f'objects: {store_name} already exist in {WCSD_ZARR_BUCKET_NAME}.')
         #     continue  # Zarr Store already exists!
-        s3.download_file(  # TODO: check if already exists?!
-            Bucket=WCSD_BUCKET_NAME,
+        #
+        # TODO: check if file already exists & DELETE
+        #
+        s3.download_file(
+            Bucket=INPUT_BUCKET,
             Key=raw_file,
             Filename=os.path.basename(raw_file),
             Config=transfer_config
         )
-        print(f'Open raw: {filename}')
+        print(f'Opening raw: {filename}')
         echodata = ep.open_raw(filename, sonar_model=sensor)  # 'EK60'
         if os.path.exists(os.path.basename(raw_file)):
             print(f'Removing existing raw file: {os.path.basename(raw_file)}')
@@ -301,8 +317,6 @@ def main(sub_prefix="data/raw/Henry_B._Bigelow/HB0707/EK60/"):
         )  # <-- NOTE this will be the actual width instead of ping_time
         # Returns a FeatureCollection with IDs as "time1"
         geojson = gps_gdf.to_json()
-        # TODO: bookkeeping to keep track of missing values in lat/lon
-        # TODO: bookkeeping to keep track of missing values in ds_Sv.Sv
         # ds = ep.calibrate.compute_Sv(ed)
         # ds.Sv.shape  # (3, 3202, 1322) <-- (freq, time, depth) <- TODO: is this always in this order?
         # len(ds.Sv.ping_time)  # 3202
@@ -311,9 +325,7 @@ def main(sub_prefix="data/raw/Henry_B._Bigelow/HB0707/EK60/"):
         #
         # TODO: Get attributes and pass along where needed downstream
         #
-        # Get metrics for DynamoDB
-        # zarr_bucket = WCSD_ZARR_BUCKET_NAME,
-        zarr_path = os.path.join(zarr_prefix, zarr_directory)
+        zarr_path = os.path.join(zarr_prefix, store_name)
         min_echo_range = float(np.nanmin(ds_Sv.echo_range.values[np.nonzero(ds_Sv.echo_range.values)]))
         max_echo_range = float(np.nanmax(ds_Sv.echo_range))
         num_echo_range = ds_Sv.range_sample.values.shape[0]
@@ -324,36 +336,43 @@ def main(sub_prefix="data/raw/Henry_B._Bigelow/HB0707/EK60/"):
         end_time = np.datetime_as_string(ds_Sv.ping_time.values[-1], unit='ms') + "Z"
         channels = list(ds_Sv.channel.values)
         #
-        if os.path.exists(zarr_directory):  # os.remove(zarr_filename)
-            print(f'Removing existing zarr directory: {zarr_directory}')
-            shutil.rmtree(zarr_directory)
+        if os.path.exists(store_name):
+            print(f'Removing existing zarr directory: {store_name}')
+            shutil.rmtree(store_name)
         print('Creating Zarr')
-        ds_Sv.to_zarr(store=zarr_directory)
+        ds_Sv.to_zarr(store=store_name) # TODO: will this crash if it doesn't write to /tmp directory
         print('Note: Adding GeoJSON inside Zarr store')
-        with open(os.path.join(zarr_directory, 'geo.json'), "w") as outfile:
+        with open(os.path.join(store_name, 'geo.json'), "w") as outfile:
             outfile.write(geojson)
         count = 0  # count number of local zarr files
-        for subdir, dirs, files in os.walk(zarr_directory):
+        for subdir, dirs, files in os.walk(store_name):
             count += len(files)
         # Create client for writing to NODD bucket.
-        secret = get_secret(secret_name=secret_name)
-        s3_zarr_client = boto3.client(
-            service_name='s3',
-            aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
-            aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
-        )
+        #################################################################
+        if ENV[environment] is ENV.PROD:
+            # If PROD write to noaa-wcsd-zarr-pds bucket
+            secret = get_secret(secret_name=SECRET_NAME)
+            s3_zarr_client = boto3.client(
+                service_name='s3',
+                aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
+                aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
+            )
+        else:
+            # If DEV write to dev bucket
+            s3_zarr_client = session.client(service_name='s3', config=client_config)
+        #################################################################
         #
         # TODO: if num local files != num remote files
         raw_zarr_files = get_raw_files(
-            bucket_name=WCSD_ZARR_BUCKET_NAME,
-            sub_prefix=os.path.join(zarr_prefix, zarr_directory)
+            bucket_name=OUTPUT_BUCKET,
+            sub_prefix=os.path.join(zarr_prefix, store_name)
         )
         #  if not OVERWRITE:
         if len(raw_zarr_files) == count and not OVERWRITE:
-            print(f'objects: {zarr_directory} already exist in {WCSD_ZARR_BUCKET_NAME} with proper count {count}.')
+            print(f'objects: {store_name} already exist in {OUTPUT_BUCKET} with proper count {count}.')
             continue  # TODO: change from continue to return statement
         if len(raw_zarr_files) > 0:
-            print(f'Some objects arelready exist at {zarr_directory} in {WCSD_ZARR_BUCKET_NAME}. Deleting.')
+            print(f'Some objects arelready exist at {store_name} in {OUTPUT_BUCKET}. Deleting.')
             # TODO: delete all files in s3 bucket
             # Delete in groups of 100
             objects_to_delete = []
@@ -363,7 +382,7 @@ def main(sub_prefix="data/raw/Henry_B._Bigelow/HB0707/EK60/"):
             for batch in chunks(objects_to_delete, 100):
                 # print(f"0: {batch[0]}, -1: {batch[-1]}")
                 deleted = s3_zarr_client.delete_objects(
-                    Bucket=WCSD_ZARR_BUCKET_NAME,
+                    Bucket=OUTPUT_BUCKET,
                     Delete={
                         "Objects": batch
                     }
@@ -372,35 +391,42 @@ def main(sub_prefix="data/raw/Henry_B._Bigelow/HB0707/EK60/"):
         #
         print('Uploading files')
         upload_files(
-            local_directory=zarr_directory,
-            bucket=WCSD_ZARR_BUCKET_NAME,
+            local_directory=store_name,
+            bucket=OUTPUT_BUCKET,
             object_prefix=zarr_prefix,
             s3_client=s3_zarr_client
         )
         # Verify number of remote zarr files.
         num_raw_files = len(get_raw_files(
-            bucket_name=WCSD_ZARR_BUCKET_NAME,
-            sub_prefix=os.path.join(zarr_prefix, zarr_directory)
+            bucket_name=OUTPUT_BUCKET,
+            sub_prefix=os.path.join(zarr_prefix, store_name)
         ))
         if not num_raw_files == count:
             raise
-        if os.path.exists(zarr_directory):  # os.remove(zarr_filename)
-            print(f'Removing zarr directory: {zarr_directory}')
-            shutil.rmtree(zarr_directory)
+        if os.path.exists(store_name):  # os.remove(zarr_filename)
+            print(f'Removing zarr directory: {store_name}')
+            shutil.rmtree(store_name)
         #
         # Write to DynamoDB
+        #
+        # TODO: DELETE EXISTING TABLE
+        #
+        create_table(
+            prefix=prefix,
+            ship_name=ship,
+            cruise_name=cruise,
+            sensor_name=sensor
+        )
         write_to_table(
+            prefix=prefix,
             cruise_name=cruise,
             sensor_name=sensor,
             ship_name=ship,
             filename=filename,
-            zarr_bucket=WCSD_ZARR_BUCKET_NAME,
+            zarr_bucket=OUTPUT_BUCKET,
             zarr_path=zarr_path,
             min_echo_range=min_echo_range,
             max_echo_range=max_echo_range,
-            num_echo_range=num_echo_range,
-            num_channel=num_channel,
-            num_ping_time=num_ping_time,
             num_ping_time_dropna=num_ping_time_dropna,
             start_time=start_time,
             end_time=end_time,
@@ -411,19 +437,18 @@ def main(sub_prefix="data/raw/Henry_B._Bigelow/HB0707/EK60/"):
         print('done processing raw_file')
 
 
-# total_objects = s3.list_objects_v2(
-#     Bucket=WCSD_ZARR_BUCKET_NAME,
-#     Prefix='data/raw/Okeanos_Explorer_EX1608_EK60_EX1608_EK60-D20161207-T111909.raw.zarr'
-# )['KeyCount']
-
-if __name__ == '__main__':
-    main()
-
-
-def lambda_handler(event, context):
+def lambda_handler(event: dict, context: dict) -> dict:
+    PREFIX = os.environ['PREFIX']
     json_region = os.environ['AWS_REGION']
     print("Processing bucket: {event['bucket']}, key: {event['key']}.")
     message = "Processing bucket: {event['bucket']}, key: {event['key']}."
+    main(
+        environment=os.environ['ENV'],  # DEV or TEST
+        prefix=os.environ['PREFIX'],    # unique to each cloudformation deployment
+        ship_name=os.environ['SHIP'],
+        cruise_name=os.environ['CRUISE'],
+        sensor_name=os.environ['SENSOR']
+    )
     return {'message': message}
 
 ######################################################################

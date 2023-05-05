@@ -573,6 +573,7 @@ Resources:
           /opt/aws/bin/cfn-init -v --configsets default --stack ${AWS::StackName} --region ${AWS::Region} --resource=OrchestratorEC2Instance
           /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --region ${AWS::Region} --resource=OrchestratorEC2Instance
 
+
 # sudo view /var/log/cfn-init-cmd.log
 #
 #export NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID=$(aws secretsmanager get-secret-value --region ${AWS::Region} --secret-id NOAA_WCSD_ZARR_PDS_BUCKET --query SecretString --output text | jq -r .NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID)

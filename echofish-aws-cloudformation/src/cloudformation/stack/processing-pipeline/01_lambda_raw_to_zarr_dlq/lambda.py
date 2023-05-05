@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import base64
 import boto3
 from botocore.config import Config
@@ -109,7 +111,7 @@ def publish_message(loggroup, logstream, error_msg, lambda_func_name, failed_key
         logger.error("An error occured: %s" % e)
 
 
-def handler(event, context):
+def lambda_handler(event: dict, context: dict) -> dict:
     print("Lambda function ARN:", context.invoked_function_arn)
     print("CloudWatch log stream name:", context.log_stream_name)
     print("CloudWatch log group name:",  context.log_group_name)
