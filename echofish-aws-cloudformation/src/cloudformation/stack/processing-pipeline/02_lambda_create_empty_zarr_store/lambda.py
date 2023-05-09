@@ -12,25 +12,21 @@ from numcodecs import Blosc
 import zarr
 import pandas as pd
 from enum import Enum
-
 ENV = Enum("ENV", ["DEV", "PROD"])
 
 # aws --profile=echofish --region=us-east-1 secretsmanager get-resource-policy --secret-id="NOAA_WCSD_ZARR_PDS_BUCKET"
 # client = boto3.client('ssm')
 
 session = boto3.Session()
-max_pool_connections = 64
+max_pool_connections = 128
 SECRET_NAME = "NOAA_WCSD_ZARR_PDS_BUCKET"
 PREFIX = 'RUDY'
 
 client_config = botocore.config.Config(max_pool_connections=max_pool_connections)
 transfer_config = boto3.s3.transfer.TransferConfig(
-    multipart_threshold=8388608 * 2,
     max_concurrency=100,
-    multipart_chunksize=8388608 * 2,
     num_download_attempts=5,
     max_io_queue=100,
-    io_chunksize=262144,
     use_threads=True,
     max_bandwidth=None
 )
@@ -126,7 +122,7 @@ def create_zarr_store(
         channel: list,
         frequency: list,
 ) -> None:
-    # Creates an empty Zarr store
+    # Creates an empty Zarr store for cruise level visualization
     compressor = Blosc(cname="zstd", clevel=5, shuffle=Blosc.BITSHUFFLE)
     store = zarr.DirectoryStore(path=store_name)  # TODO: write directly to s3?
     root = zarr.group(store=store, path="/", overwrite=True)
@@ -140,7 +136,7 @@ def create_zarr_store(
     root.depth[:] = np.round(
         np.linspace(start=0, stop=min_echo_range * height, num=height),
         decimals=2
-    )  # Note: "depth" starts at zero
+    )  # Note: "depth" starts at zero inclusive
     # Coordinates: Channel
     root.create_dataset(name="/channel", shape=len(channel), chunks=1, dtype='str', **args)
     root.channel.attrs['_ARRAY_DIMENSIONS'] = ['channel']
@@ -173,8 +169,13 @@ def get_table_as_dataframe(
         cruise_name: str,
         sensor_name: str,
 ) -> pd.DataFrame:
+    # Only successfully processed files will be aggregated into the larger store
     dynamodb = session.resource(service_name='dynamodb')
     try:
+        # if ENV[environment] is ENV.PROD:
+        #     table_name = f"{ship_name}_{cruise_name}_{sensor_name}"
+        # else:
+        #     table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
         table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
         table = dynamodb.Table(table_name)
         response = table.scan()  # Scan has 1 MB limit on results --> paginate
@@ -193,17 +194,18 @@ def get_table_as_dataframe(
 
 
 def main(
-        environment: str='DEV',
+        environment: str='PROD',
         prefix: str='rudy',
         ship_name: str='Henry_B._Bigelow',
         cruise_name: str='HB0707',
         sensor_name: str='EK60'
 ) -> None:
     #################################################################
+    # TODO: Fix this, should write to one bucket variable
     if ENV[environment] is ENV.PROD:
-        OUTPUT_BUCKET = 'noaa-wcsd-zarr-pds'
+        OUTPUT_BUCKET = 'noaa-wcsd-zarr-pds'  # PROD
     else:
-        OUTPUT_BUCKET = "noaa-wcsd-pds-index"
+        OUTPUT_BUCKET = "noaa-wcsd-pds-index"  # DEV
     #
     df = get_table_as_dataframe(prefix=prefix, ship_name=ship_name, cruise_name=cruise_name, sensor_name=sensor_name)
     #################################################################
@@ -223,10 +225,7 @@ def main(
     # new_width = int(np.ceil(total_width / tile_size) * tile_size)
     new_width = int(consolidated_zarr_width)
     #################################################################
-    if ENV[environment] is ENV.PROD:
-        store_name = f"{cruise_name}.zarr"
-    else:
-        store_name = f"{prefix}_{cruise_name}.zarr"
+    store_name = f"{cruise_name}.zarr"
     #################################################################
     if os.path.exists(store_name):
         print(f'Removing local zarr directory: {store_name}')

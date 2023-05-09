@@ -53,7 +53,7 @@ def error_details(payload):
     #logger.debug(f"requestId: {type(requestId)}")
     failed_key = ""
     try:
-        time.sleep(60) # Note: CloudWatch Insights needs time to generate the initial log
+        time.sleep(60) # Note: CloudWatch Insights needs a lot of time to generate the initial log
         endTime = math.floor(time.time()) + 30
         startTime = endTime - (60 * 60 * 48) # N hours into the past
         response = log_client.start_query(
