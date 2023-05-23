@@ -20,6 +20,11 @@ Resources:
   DeploymentBucket:
     Type: AWS::S3::Bucket
     Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
       BucketName: !Ref DeploymentBucketName
 
 

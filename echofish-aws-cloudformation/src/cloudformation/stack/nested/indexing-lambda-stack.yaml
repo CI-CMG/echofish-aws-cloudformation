@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EchoFish Geometry Pipeline
+
+Parameters:
+  RolePermissionsBoundary:
+    Description: An optional permissions boundary to associate with roles
+    Type: String
+    Default: ""
+  ImageTag:
+    Type: String
+  LogRetentionInDays:
+    Type: Number
+    Default: 30
+  MemorySize:
+    Type: Number
+  Timeout:
+    Type: Number
+
+Conditions:
+  HasPermissionsBoundary:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - !Ref RolePermissionsBoundary
+
+Resources:
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary:
+        Fn::If:
+          - HasPermissionsBoundary
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
+          - !Ref AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+
+
+  Lambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ImageUri: !Sub 118234403147.dkr.ecr.us-west-2.amazonaws.com/echofish-aws-indexing-lambda:${ImageTag}
+      PackageType: Image
+      MemorySize: !Ref MemorySize
+      Timeout: !Ref Timeout
+      Role: !GetAtt LambdaRole.Arn
+
+
+
+  EC2LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/ec2/${AWS::StackName}/raw2zarr-ec2
+      RetentionInDays: !Ref LogRetentionInDays
+
+
+Outputs:
+  LambdaArn:
+    Value: !GetAtt Lambda.Arn
+  LambdaName:
+    Value: !Ref Lambda

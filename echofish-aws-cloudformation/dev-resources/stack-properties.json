@@ -1,0 +1,5 @@
+{
+  "version": "@project.version@",
+  "deployStackName": "@user.name@-dev-echofish-deploy",
+  "stackName": "@user.name@-dev-echofish"
+}

@@ -1,0 +1,23 @@
+version: 0.2
+
+env:
+  parameter-store:
+    github_pat: github_pat
+    github_username: github_username
+
+phases:
+  pre_build:
+    commands:
+      - git config --global user.email "mggdev-aws@mggdev.cloud"
+      - git config --global user.name "mggdev-aws"
+  install:
+    runtime-versions:
+      java: corretto11
+  build:
+    commands:
+      - mvn -B install -DskipTests
+      - chmod +x csb-nodd-conveyor-build/target/codepipeline/buildspec-branch.sh
+      - echofish-aws-build/target/codepipeline/buildspec-branch.sh "$github_pat" "$github_username"
+artifacts:
+  files:
+    - '**/*'

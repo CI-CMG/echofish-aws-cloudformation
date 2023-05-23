@@ -1,0 +1,10 @@
+[
+  {
+    "ParameterKey": "StackPrefix",
+    "ParameterValue": "@user.name@-dev-echofish"
+  },
+  {
+    "ParameterKey": "RolePermissionsBoundary",
+    "ParameterValue": "CIRES_Admin_PermissionBoundary"
+  }
+]
