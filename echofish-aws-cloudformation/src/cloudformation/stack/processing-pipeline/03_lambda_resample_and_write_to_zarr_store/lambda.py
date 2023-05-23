@@ -27,22 +27,19 @@ INPUT_BUCKET = "noaa-wcsd-pds-index"
 OUTPUT_BUCKET = "noaa-wcsd-zarr-pds"
 
 client_config = botocore.config.Config(max_pool_connections=max_pool_connections)
-transfer_config = boto3.s3.transfer.TransferConfig(
-    max_concurrency=100,
-    num_download_attempts=5,
-    max_io_queue=100,
-    use_threads=True,
-    max_bandwidth=None
-)
+transfer_config = boto3.s3.transfer.TransferConfig(max_concurrency=100)
 
 s3 = session.client(service_name='s3', config=client_config)  # good
 
-OVERWRITE = True  # If True will delete existing Zarr Store
+OVERWRITE = True  # If True, delete existing Zarr Store
 TILE_SIZE = 1024  # TODO: GET FROM UPSTREAM
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+os.environ["HOME"] = "/tmp"
+TEMPDIR = os.environ['HOME']
 
 
 def get_secret(secret_name: str) -> dict:
@@ -62,6 +59,7 @@ def get_secret(secret_name: str) -> dict:
             print("The requested secret can't be decrypted using the provided KMS key:", e)
         elif e.response['Error']['Code'] == 'InternalServiceError':
             print("An error occurred on service side:", e)
+
 
 
 def get_table_as_dataframe(
@@ -118,55 +116,56 @@ def main(
     input_bucket: str=INPUT_BUCKET,
     file_name: str='D20070711-T210709.raw'
 ) -> None:
-#################################################################
-if ENV[environment] is ENV.PROD:
-    print("PROD, use external credential to write to noaa-wcsd-zarr-pds bucket")
-    secret = get_secret(secret_name=SECRET_NAME)
-    s3_zarr_client = boto3.client(
-        service_name='s3',
+    #################################################################
+    os.chdir(TEMPDIR)
+    if ENV[environment] is ENV.PROD:
+        print("PROD, use external credential to write to noaa-wcsd-zarr-pds bucket")
+        secret = get_secret(secret_name=SECRET_NAME)
+        s3_zarr_client = boto3.client(
+            service_name='s3',
+            aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
+            aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
+        )
+        s3_zarr_session = boto3.Session(
+            aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
+            aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
+        )
+    else:
+        print("DEV, use regular credentials to write to dev bucket")
+        s3_zarr_client = session.client(service_name='s3', config=client_config)
+    #################################################################
+    # [0] get dynamoDB table info ####################################
+    df = get_table_as_dataframe(
+        prefix=prefix,
+        ship_name=ship_name,
+        cruise_name=cruise_name,
+        sensor_name=sensor_name,
+    )
+    start_file_index = df.index[df['FILE_NAME'] == file_name][0]
+    start_ping_time_index = int(np.cumsum(df['NUM_PING_TIME_DROPNA'])[start_file_index])
+    #################################################################
+    #################################################################
+    # [1] read cruise level zarr store using xarray for writing #####
+    #session = aiobotocore.session.AioSession(profile='echofish')
+    #aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID']
+    #aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY']
+    session = aiobotocore.session.AioSession.create_client(
         aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
         aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
     )
-    s3_zarr_session = boto3.Session(
-        aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
-        aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
+    s3 = s3fs.S3FileSystem(session=session)
+    file_basename = os.path.basename(file_name).split('.')[0]
+
+    geo_json = geopandas.read_file(filename=)
+    # TODO: get concave hull with https://pypi.org/project/alphashape/
+
+    s3 = s3fs.S3FileSystem(key=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'], secret=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'])
+    store = s3fs.S3Map(
+        root=f's3://{INPUT_BUCKET}/data/processed/{ship_name}/{cruise_name}/{sensor_name}/{file_basename}.zarr',
+        s3=s3,
+        check=False
     )
-else:
-    print("DEV, use regular credentials to write to dev bucket")
-    s3_zarr_client = session.client(service_name='s3', config=client_config)
-#################################################################
-# [0] get dynamoDB table info ####################################
-df = get_table_as_dataframe(
-    prefix=prefix,
-    ship_name=ship_name,
-    cruise_name=cruise_name,
-    sensor_name=sensor_name,
-)
-start_file_index = df.index[df['FILE_NAME'] == file_name][0]
-start_ping_time_index = int(np.cumsum(df['NUM_PING_TIME_DROPNA'])[start_file_index])
-#################################################################
-#################################################################
-# [1] read cruise level zarr store using xarray for writing #####
-#session = aiobotocore.session.AioSession(profile='echofish')
-#aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID']
-#aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY']
-session = aiobotocore.session.AioSession.create_client(
-    aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
-    aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
-)
-s3 = s3fs.S3FileSystem(session=session)
-file_basename = os.path.basename(file_name).split('.')[0]
-
-geo_json = geopandas.read_file(filename=)
-# TODO: get concave hull with https://pypi.org/project/alphashape/
-
-s3 = s3fs.S3FileSystem(key=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'], secret=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'])
-store = s3fs.S3Map(
-    root=f's3://{INPUT_BUCKET}/data/processed/{ship_name}/{cruise_name}/{sensor_name}/{file_basename}.zarr',
-    s3=s3,
-    check=False
-)
-ds_cruise = xr.open_zarr(store=store, consolidated=False)  # <- cruise level zarr store
+    ds_cruise = xr.open_zarr(store=store, consolidated=False)  # <- cruise level zarr store
 
 
 # TODO: PROBLEM HERE IS THAT NO DATA EXISTS AT PATH
@@ -211,7 +210,7 @@ ship_name = 'Henry_B._Bigelow'
 cruise_name = 'HB0707'
 sensor_name = 'EK60'
 filename = 'D20070711-T182032.zarr'
-store_name = os.path.join(WCSD_ZARR_BUCKET_NAME, 'data', 'raw', ship_name, cruise_name, sensor, filename)
+store_name = os.path.join(WCSD_ZARR_BUCKET_NAME, 'data', 'raw', ship_name, cruise_name, sensor_name, filename)
 store_name = 'noaa-wcsd-zarr-pds/data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
 import fsspec
 

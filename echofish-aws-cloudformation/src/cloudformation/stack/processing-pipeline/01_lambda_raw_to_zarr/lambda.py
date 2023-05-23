@@ -1,60 +1,114 @@
 #!/usr/bin/env python
 
 import os
-import json
 import glob
 import shutil
 import echopype as ep
 import boto3
-import botocore
+from boto3.s3.transfer import TransferConfig
 import numpy as np
 import pandas as pd
 import geopandas
 from datetime import datetime
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from enum import Enum
+from collections.abc import Generator
 
-ENV = Enum("ENV", ["DEV", "PROD"])
-
-session = boto3.Session()
-max_pool_connections = 64
-SECRET_NAME = "NOAA_WCSD_ZARR_PDS_BUCKET" # TODO: DON'T NEED HERE
-
-client_config = botocore.config.Config(max_pool_connections=max_pool_connections)
-transfer_config = boto3.s3.transfer.TransferConfig(
-    max_concurrency=100,
-    num_download_attempts=5,
-    max_io_queue=100,
-    use_threads=True,
-    max_bandwidth=None
-)
-
-s3 = session.client(service_name='s3', config=client_config)  # good
 FILE_SUFFIX = '.raw'
-OVERWRITE = False
-# SIMPLIFICATION_TOLERANCE = 0.001
+OVERWRITE = True
+MAX_POOL_CONNECTIONS = 64
+MAX_CONCURRENCY = 100
+# tempfile.gettempdir()
+TEMPDIR = "/tmp"
 
-
-def delete_all_local_raw_and_zarr_files():
-    # Used to cleanse the system of any ephemeral files
+#####################################################################
+def delete_all_local_raw_and_zarr_files() -> None:
+    # Used to clean up any residual files from warm lambdas
+    # to keep storage footprint low
     for i in ['*.raw*', '*.zarr']:
         for j in glob.glob(i):
-            f'Deleting {j}'
+            print(f'Deleting {j}')
             if os.path.isdir(j):
                 shutil.rmtree(j, ignore_errors=True)
             elif os.path.isfile(j):
                 os.remove(j)
 
-def delete_remote(raw_zarr_files: list, output_bucket: str, s3_zarr_client):
-    # Delete in groups of 100
+#####################################################################
+def download_raw_file(
+        input_bucket: str, raw_file: str
+):
+    s3_session = boto3.Session()
+    client_config = Config(max_pool_connections=MAX_POOL_CONNECTIONS)
+    s3 = s3_session.client(service_name='s3', config=client_config)
+    s3.download_file(
+        Bucket=input_bucket,
+        Key=raw_file,
+        Filename=os.path.basename(raw_file),
+        Config=TransferConfig(max_concurrency=MAX_CONCURRENCY)
+    )
+
+#####################################################################
+def chunks(
+        ll: list,
+        n: int
+) -> Generator:
+    """Yields successively n-sized chunks from ll.
+
+    Parameters
+    ----------
+    ll : list
+        List of all objects.
+    n : int
+        Chunk size to break larger list down from.
+
+    Returns
+    -------
+    Batches : Generator
+        Breaks the data into smaller chunks for processing
+    """
+    for i in range(0, len(ll), n):
+        yield ll[i:i + n]
+
+#####################################################################
+def delete_remote_objects(
+        raw_zarr_files: list,
+        output_bucket: str,
+        access_key_id: str = None,
+        secret_access_key: str = None,
+) -> None:
+    """Delete objects in s3 bucket. Deletion is limited
+    to groups of 100 at a time.
+
+    Parameters
+    ----------
+    raw_zarr_files : list
+        Files to delete.
+    output_bucket : str
+        Prefix path to folder containing children objects.
+    aws_access_key_id : str
+        AWS access key id. Optional.
+    aws_secret_access_key : str
+        AWS access key secret. Optional.
+
+    Returns
+    -------
+    None
+    """
+    s3_session = boto3.Session()
+    client_config = Config(max_pool_connections=MAX_POOL_CONNECTIONS)
+    s3 = s3_session.client(
+        service_name='s3',
+        config=client_config,
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+    )
     objects_to_delete = []
     for raw_zarr_file in raw_zarr_files:
         objects_to_delete.append({'Key': raw_zarr_file['Key']})
     # Delete in groups of 100 -- Boto3 constraint.
     for batch in chunks(objects_to_delete, 100):
         # print(f"0: {batch[0]}, -1: {batch[-1]}")
-        deleted = s3_zarr_client.delete_objects(
+        deleted = s3.delete_objects(
             Bucket=output_bucket,
             Delete={
                 "Objects": batch
@@ -62,32 +116,39 @@ def delete_remote(raw_zarr_files: list, output_bucket: str, s3_zarr_client):
         )
         print(f"Deleted {len(deleted['Deleted'])} files")
 
+#####################################################################
+def find_children_objects(
+        bucket_name: str,
+        sub_prefix: str = None,
+        access_key_id: str = None,
+        secret_access_key: str = None,
+) -> list:
+    """Finds all child objects for a given prefix in a s3 bucket.
 
-def chunks(ll, n):
-    # Yields successive n-sized chunks from ll.
-    # Needed to delete files in groups of N
-    for i in range(0, len(ll), n):
-        yield ll[i:i + n]
+    Parameters
+    ----------
+    bucket_name : str
+        Name of bucket to read from.
+    sub_prefix : str
+        Prefix path to folder containing children objects. Optional.
+    access_key_id : str
+        AWS access key id. Optional.
+    secret_access_key : str
+        AWS access key secret. Optional.
 
-
-# def check_object_exists(object_key: str) -> bool:
-#     try:
-#         s3.Object(WCSD_BUCKET_NAME, object_key).load()
-#     except botocore.exceptions.ClientError as e:
-#         if e.response['Error']['Code'] == "404":
-#             # The object does not exist.
-#             return False
-#         else:
-#             # Something else has gone wrong.
-#             raise
-#             return False
-#     else:
-#         return True
-
-
-def find_child_objects(bucket_name: str, sub_prefix: str) -> list:
-    # Find all objects for a given prefix string.
-    # Returns list of strings.
+    Returns
+    -------
+    objects : list
+        List of object names as strings.
+    """
+    client_config = Config(max_pool_connections=MAX_POOL_CONNECTIONS)
+    session = boto3.Session()
+    s3 = session.client(
+        service_name='s3',
+        config=client_config,
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+    )
     paginator = s3.get_paginator('list_objects_v2')
     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=sub_prefix)
     objects = []
@@ -95,88 +156,119 @@ def find_child_objects(bucket_name: str, sub_prefix: str) -> list:
         objects.extend(page['Contents'])
     return objects
 
-
-def get_secret(secret_name: str) -> dict:
-    # secret_name = "NOAA_WCSD_ZARR_PDS_BUCKET"  # TODO: parameterize
-    secretsmanager_client = session.client(service_name='secretsmanager')
-    try:
-        get_secret_value_response = secretsmanager_client.get_secret_value(SecretId=secret_name)
-        return json.loads(get_secret_value_response['SecretString'])
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            print("The requested secret " + secret_name + " was not found")
-        elif e.response['Error']['Code'] == 'InvalidRequestException':
-            print("The request was invalid due to:", e)
-        elif e.response['Error']['Code'] == 'InvalidParameterException':
-            print("The request had invalid params:", e)
-        elif e.response['Error']['Code'] == 'DecryptionFailure':
-            print("The requested secret can't be decrypted using the provided KMS key:", e)
-        elif e.response['Error']['Code'] == 'InternalServiceError':
-            print("An error occurred on service side:", e)
-
-
-def upload_files(
+#####################################################################
+def upload_zarr_store_to_s3(
         local_directory: str,
-        bucket: str,
+        bucket_name: str,
         object_prefix: str,
-        s3_client
+        access_key_id: str = None,
+        secret_access_key: str = None,
 ) -> None:
-    # Note: the files are being uploaded to a third party bucket where
-    # the credentials should be saved in the aws secrets manager.
+    """Uploads a local Zarr store to s3 bucket with the given prefix.
+
+    Parameters
+    ----------
+    local_directory : str
+        Path to the root of local Zarr store
+    bucket_name : str
+        Name of bucket to read from.
+    object_prefix : str
+        Prefix path to give for written objects.
+    access_key_id : str
+        AWS access key id. Optional.
+    secret_access_key : str
+        AWS access key secret. Optional.
+
+    Returns
+    -------
+    None : None
+        None
+    """
+    client_config = Config(max_pool_connections=MAX_POOL_CONNECTIONS)
+    session = boto3.Session()
+    s3 = session.client(
+        service_name='s3',
+        config=client_config,
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+    )
     for subdir, dirs, files in os.walk(local_directory):
         for file in files:
             local_path = os.path.join(subdir, file)
             print(local_path)
             s3_key = os.path.join(object_prefix, local_path)
             try:
-                # s3 = session.client(service_name='s3', config=client_config)
-                s3_client.upload_file(
+                s3.upload_file(
                     Filename=local_path,
-                    Bucket=bucket,
+                    Bucket=bucket_name,
                     Key=s3_key,
-                    Config=transfer_config
+                    Config=TransferConfig(max_concurrency=MAX_CONCURRENCY)
                 )
             except ClientError as e:
                 # logging.error(e)
                 print(e)
 
-
-def get_raw_files(
+#####################################################################
+def get_s3_files(
         bucket_name: str,
         sub_prefix: str,
-        file_suffix: str = None
+        file_suffix: str = None,
+        access_key_id: str = None,
+        secret_access_key: str = None,
 ) -> list:
-    # Get all children files. Optionally defined by file_suffix.
-    # Returns empty list if none are found or error encountered.
+    """Get all files in a s3 bucket defined by prefix and suffix.
+
+    Parameters
+    ----------
+    bucket_name : str
+        Name of bucket to read from.
+    sub_prefix : str
+        Prefix path to folder containing children objects. Optional.
+    file_suffix : str
+        Suffix for which all files will be filtered by. Optional.
+    access_key_id : str
+        AWS access key id. Optional.
+    secret_access_key : str
+        AWS access key secret. Optional.
+
+    Returns
+    -------
+    objects : list
+        List of object names as strings.
+    """
     print('Getting raw files')
     raw_files = []
     try:
-        children = find_child_objects(bucket_name=bucket_name, sub_prefix=sub_prefix)
+        children = find_children_objects(
+            bucket_name=bucket_name,
+            sub_prefix=sub_prefix,
+            access_key_id=access_key_id,
+            secret_access_key=secret_access_key
+        )
         if file_suffix is None:
             raw_files = children
         else:
             for i in children:
                 # Note any files with predicate 'NOISE' are to be ignored, see: "Bell_M._Shimada/SH1507"
-                if i['Key'].endswith(file_suffix) and not os.path.basename(i['Key']).startswith('NOISE'):
+                if i['Key'].endswith(file_suffix) and not os.path.basename(i['Key']).startswith(('NOISE')):
                     raw_files.append(i['Key'])
             return raw_files
     except ClientError as err:
         print(f"Some problem was encountered: {err}")
-    finally:
-        return raw_files
+        raise
+    return raw_files
 
 
-########################################
-# TODO: TEMPORARY — MOVE TO ORCHESTRATOR
+#####################################################################
+# TODO: this db should be ephemeral — MOVE TO ORCHESTRATOR
 def create_table(
         prefix: str,
         ship_name: str,
         cruise_name: str,
         sensor_name: str,
 ) -> None:
-    # HASH: FILE_NAME, RANGE: SENSOR_NAME
     # TODO: TEMPORARY — MOVE TO ORCHESTRATOR
-    dynamodb = session.client(service_name='dynamodb')
+    dynamodb = boto3.Session().client(service_name='dynamodb')
     table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
     existing_tables = dynamodb.list_tables()['TableNames']
     if table_name not in existing_tables:
@@ -212,7 +304,7 @@ def create_table(
     else:
         print('Table exists already.')
 
-
+#####################################################################
 def write_to_table(
     prefix: str,
     cruise_name: str,
@@ -226,48 +318,51 @@ def write_to_table(
     num_ping_time_dropna: int,
     start_time: str,
     end_time: str,
+    pipeline_status: str,
     frequencies: list,
     channels: list,
 ) -> None:
     # HASH: FILE_NAME, RANGE: SENSOR_NAME
-    dynamodb = session.client(service_name='dynamodb')
+    dynamodb = boto3.Session().client(service_name='dynamodb')
     table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
-    response = dynamodb.put_item(  # TODO: verify status_code['ResponseMetadata']['HTTPStatusCode'] == 200
-        TableName=table_name,
-        Item={
-            'FILE_NAME': {'S': file_name},
-            'SHIP_NAME': {'S': ship_name},
-            'CRUISE_NAME': {'S': cruise_name},
-            'SENSOR_NAME': {'S': sensor_name},
-            'ZARR_BUCKET': {'S': zarr_bucket},
-            'ZARR_PATH': {'S': zarr_path},
-            'MIN_ECHO_RANGE': {'N': str(np.round(min_echo_range, 4))},
-            'MAX_ECHO_RANGE': {'N': str(np.round(max_echo_range, 4))},
-            'NUM_PING_TIME_DROPNA': {'N': str(num_ping_time_dropna)},
-            'START_TIME': {'S': start_time},
-            'END_TIME': {'S': end_time},
-            'PIPELINE_TIME': {'S': datetime.now().isoformat(timespec="seconds") + "Z"},
-            'PIPELINE_STATUS': {'S': 'SUCCESS'},
-            'FREQUENCIES': {'L': [{'N': str(i)} for i in frequencies]},
-            'CHANNELS': {'L': [{'S': i} for i in channels]},
-        }
-    )
-    status_code = response['ResponseMetadata']['HTTPStatusCode']
-    #print(f"Status code: {status_code}")
-    assert (status_code == 200), "Unable to update dynamodb table"
+    try:
+        response = dynamodb.put_item(  # TODO: verify status_code['ResponseMetadata']['HTTPStatusCode'] == 200
+            TableName=table_name,
+            Item={
+                'FILE_NAME': {'S': file_name},
+                'SHIP_NAME': {'S': ship_name},
+                'CRUISE_NAME': {'S': cruise_name},
+                'SENSOR_NAME': {'S': sensor_name},
+                'ZARR_BUCKET': {'S': zarr_bucket},
+                'ZARR_PATH': {'S': zarr_path},
+                'MIN_ECHO_RANGE': {'N': str(np.round(min_echo_range, 4))},
+                'MAX_ECHO_RANGE': {'N': str(np.round(max_echo_range, 4))},
+                'NUM_PING_TIME_DROPNA': {'N': str(num_ping_time_dropna)},
+                'START_TIME': {'S': start_time},
+                'END_TIME': {'S': end_time},
+                'PIPELINE_TIME': {'S': datetime.now().isoformat(timespec="seconds") + "Z"},
+                'PIPELINE_STATUS': {'S': pipeline_status},
+                'FREQUENCIES': {'L': [{'N': str(i)} for i in frequencies]},
+                'CHANNELS': {'L': [{'S': i} for i in channels]},
+            }
+        )
+        status_code = response['ResponseMetadata']['HTTPStatusCode']
+        assert (status_code == 200), "Unable to update dynamodb table"
+    except Exception as e:
+        print(f"Error updating table: {e}")
 
-
+#####################################################################
 def set_processing_status(
     prefix: str,
     ship_name: str,
     cruise_name: str,
     sensor_name: str,
     file_name: str,  # Hash
-    new_status: str, # TODO: change to enum
+    new_status: str,  # TODO: change to enum?
 ) -> None:
     # Updates PIPELINE_STATUS via new_status value
     # HASH: FILE_NAME, RANGE: SENSOR_NAME
-    dynamodb = session.client(service_name='dynamodb')
+    dynamodb = boto3.Session().client(service_name='dynamodb')
     table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
     response = dynamodb.put_item(  # TODO: verify status_code['ResponseMetadata']['HTTPStatusCode'] == 200
         TableName=table_name,
@@ -283,16 +378,16 @@ def set_processing_status(
     status_code = response['ResponseMetadata']['HTTPStatusCode']
     assert(status_code == 200), "Unable to update dynamodb table"
 
-
+#####################################################################
 def get_processing_status(
         prefix: str,
         ship_name: str,
+        cruise_name: str,  # Range
         sensor_name: str,
         file_name: str,  # Hash
-        cruise_name: str,
-) -> None:
+) -> str:
     # HASH: FILE_NAME, RANGE: SENSOR_NAME
-    dynamodb = session.client(service_name='dynamodb')
+    dynamodb = boto3.Session().client(service_name='dynamodb')
     table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
     response = dynamodb.get_item(
         TableName=table_name,
@@ -304,63 +399,141 @@ def get_processing_status(
     )
     if response['ResponseMetadata']['HTTPStatusCode'] == 200:
         if 'Item' in response:
-            return response['Item']['PIPELINE_STATUS']['S'] # PROCESSING or SUCCESS
+            return response['Item']['PIPELINE_STATUS']['S']  # PROCESSING or SUCCESS
         else:
             return 'NONE'
 
 
+#####################################################################
+def get_file_count(
+        store_name: str
+) -> int:
+    """Get a count of files in the local Zarr store. Hopefully this
+    can be improved upon as this is currently a very crude checksum
+    to ensure that all files are being read & written properly.
 
-def get_file_count(store_name: str):
+    Parameters
+    ----------
+    store_name : str
+        A Zarr store in the local directory.
+
+    Returns
+    -------
+    Count of files : int
+        Count of files in the Zarr store.
+    """
     count = 0  # count number of local zarr files
     for subdir, dirs, files in os.walk(store_name):
         count += len(files)
     return count
 
+#####################################################################
+def get_gps_data(
+        echodata: ep.echodata.echodata.EchoData
+) -> tuple:
+    """Extracts GPS coordinate information from the NMEA datagrams
+    using echodata object. Note: with len(nmea_times) ≈ 14691, and
+    len(sv_times) ≈ 9776, the higher frequency NMEA datagram measurements
+    needs to be right-aligned to the sv_times. The alignment will often
+    lead to missing values in the latitude/longitude coordinates. For more
+    information on d
 
-# min_echo_range = np.nanmin(ds_Sv.echo_range.values[np.nonzero(ds_Sv.echo_range.values)])
-# max_echo_range = np.nanmax(ds_Sv.echo_range)  # WRITE TO DYNAMODB
-# num_channel = ds_Sv.channel.shape[0]
-# num_ping_time = ds_Sv.ping_time.shape[0]
+    Parameters
+    ----------
+    echodata : str
+        A calibrated and computed echodata object.
+
+    Returns
+    -------
+    GeoJSON and Lat-Lon Arrays : tuple
+        GeoJSON string of the cruise coordinates aligned to the ping_time data.
+
+    Notes
+    -----
+    See also: https://github.com/OSOceanAcoustics/echopype/issues/656#issue-1219104771
+    """
+    assert(
+        'latitude' in echodata.platform.variables and 'longitude' in echodata.platform.variables
+    ), "Problem: GPS coordinates not found in echodata."
+    latitude = echodata.platform.latitude.values
+    longitude = echodata.platform.longitude.values  # len(longitude) == 14691
+    # RE: time coordinates: https://github.com/OSOceanAcoustics/echopype/issues/656#issue-1219104771
+    assert(
+        'time1' in echodata.platform.variables and 'time1' in echodata.environment.variables
+    ), "Problem: Time coordinate not found in echodata."
+    nmea_times = echodata.platform.time1.values  # len(nmea_times) == 14691
+    time1 = echodata.environment.time1.values  # len(sv_times) == 9776
+    # Align 'sv_times' to 'nmea_times'
+    assert(
+        np.all(time1[:-1] <= time1[1:]) and np.all(nmea_times[:-1] <= nmea_times[1:])
+    ), "Problem: NMEA time stamps are not sorted."
+    indices = nmea_times.searchsorted(time1, side="right") - 1
+    lat = latitude[indices]
+    lat[indices < 0] = np.nan  # values recorded before indexing are set to nan
+    lon = longitude[indices]
+    lon[indices < 0] = np.nan
+    assert(
+            np.all(lat[~np.isnan(lat)] >= -90.) and np.all(lat[~np.isnan(lat)] <= 90.)
+    ), "Problem: Data falls outside GPS bounds!"
+    # https://osoceanacoustics.github.io/echopype-examples/echopype_tour.html
+    gps_df = pd.DataFrame({'latitude': lat, 'longitude': lon, 'time1': time1}).set_index(['time1'])
+    gps_gdf = geopandas.GeoDataFrame(
+        gps_df,
+        geometry=geopandas.points_from_xy(gps_df['longitude'], gps_df['latitude']),
+        crs="epsg:4326"
+    )
+    # GeoJSON FeatureCollection with IDs as "time1"
+    geo_json = gps_gdf.to_json()
+    return geo_json, lat, lon
+
 
 def main(
-        #
-        environment: str='DEV',
         prefix: str='rudy',
         ship_name: str='Henry_B._Bigelow',
         cruise_name: str='HB0707',
-        sensor_name: str='EK60'
+        sensor_name: str='EK60',
+        input_bucket: str="noaa-wcsd-pds",
+        #output_bucket: str="noaa-wcsd-pds-index",  # "noaa-wcsd-zarr-pds",
+        output_bucket: str="noaa-wcsd-zarr-pds",  # "noaa-wcsd-zarr-pds",
+        input_file: str="D20070711-T182032.raw",
 ) -> None:
     #################################################################
-    # if ENV[environment] is ENV.PROD:
-    # INPUT_BUCKET = "noaa-wcsd-zarr-pds"
-    # OUTPUT_BUCKET = "noaa-wcsd-zarr-pds"
-    INPUT_BUCKET = "noaa-wcsd-pds"
-    OUTPUT_BUCKET = "noaa-wcsd-pds-index"
+    # AWS Lambda requires writes only in /tmp directory
+    os.chdir(TEMPDIR)
+    print(os.getcwd())
     #################################################################
-    sub_prefix = os.path.join("data", "raw", ship_name, cruise_name, sensor_name)
-    raw_files = get_raw_files(
-        bucket_name=INPUT_BUCKET,
-        sub_prefix=sub_prefix,
+    # reading from public bucket right now
+    # TODO: move to orchestrator
+    raw_files = get_s3_files(
+        bucket_name=input_bucket,
+        sub_prefix=os.path.join("data", "raw", ship_name, cruise_name, sensor_name),
         file_suffix=FILE_SUFFIX,
     )
-    # TODO: Coordinate file updates with dyanmoDB
-    create_table(
+    #################################################################
+    create_table(  # TODO: remove this in the future
         prefix=prefix,
         ship_name=ship_name,
         cruise_name=cruise_name,
         sensor_name=sensor_name
     )
-    # TODO: don't need to loop, process single file at time
+    #################################################################
     for raw_file in raw_files:
-        print(f"Processing: {raw_file}")
+        print(f"Processing raw_file: {raw_file}")
         row_split = raw_file.split(os.sep)
-        ship_name, cruise_name, sensor_name, file_name = row_split[-4:]  # 'Okeanos_Explorer', 'EX1608', 'EK60'
+        # { ship: 'Okeanos_Explorer', cruise_name: 'EX1608', sensor_name: 'EK60', file_name: 'D20070711-T182032.raw' }
+        ship_name, cruise_name, sensor_name, file_name = row_split[-4:]
         zarr_prefix = os.path.join("data", "raw", ship_name, cruise_name, sensor_name)
         store_name = f"{os.path.splitext(file_name)[0]}.zarr"
         #
-        processing_status = get_processing_status(prefix=prefix, ship_name=ship_name, sensor_name=sensor_name, file_name=file_name, cruise_name=cruise_name)
-        if processing_status == 'SUCCESS':
-            print('Already processed, skipping...')
+        processing_status = get_processing_status(
+            prefix=prefix,
+            ship_name=ship_name,
+            sensor_name=sensor_name,
+            file_name=file_name,
+            cruise_name=cruise_name
+        )
+        if processing_status == 'SUCCESS' and not OVERWRITE:
+            print('Already processed as SUCCESS, skipping...') # TODO: change continue to 'return'
             continue
         set_processing_status(
             prefix=prefix,
@@ -372,94 +545,58 @@ def main(
         )
         #################################################################
         delete_all_local_raw_and_zarr_files()
-        #
-        s3.download_file(
-            Bucket=INPUT_BUCKET,
-            Key=raw_file,
-            Filename=os.path.basename(raw_file),
-            Config=transfer_config
+        download_raw_file(
+            input_bucket=input_bucket,
+            raw_file=raw_file,
         )
+        #################################################################
         print(f'Opening raw: {file_name}')
-        echodata = ep.open_raw(file_name, sonar_model=sensor_name)  # 'EK60'
-        if os.path.exists(os.path.basename(raw_file)):
-            print(f'Removing existing raw file: {os.path.basename(raw_file)}')
-            os.remove(os.path.basename(raw_file))
+        # TODO: "use_swap" creates file in the users home directory
+        echodata = ep.open_raw(file_name, sonar_model=sensor_name)  # TODO: "use_swap=True"
+        delete_all_local_raw_and_zarr_files()
+        #################################################################
         print('Compute volume backscattering strength (Sv) from raw data.')
         ds_Sv = ep.calibrate.compute_Sv(echodata)
         frequencies = echodata.environment.frequency_nominal.values
-        assert(
-            'latitude' in echodata.platform.variables and 'longitude' in echodata.platform.variables
-        ), "GPS coordinates not found."
-        latitude = echodata.platform.latitude.values
-        longitude = echodata.platform.longitude.values  # len(longitude) == 14691
-        # RE time coordinates: https://github.com/OSOceanAcoustics/echopype/issues/656#issue-1219104771
-        nmea_times = echodata.platform.time1.values  # len(nmea_times) == 14691
-        time1 = echodata.environment.time1.values  # len(sv_times) == 9776
-        # Because of differences in measurement frequency, figure out where sv_times match up to nmea_times
-        assert(
-            np.all(time1[:-1] <= time1[1:]) and np.all(nmea_times[:-1] <= nmea_times[1:])
-        ), "NMEA time stamps are not sorted."
-        indices = nmea_times.searchsorted(time1, side="right") - 1
-        lat = latitude[indices]
-        lat[indices < 0] = np.nan  # values recorded before indexing are set to nan
-        lon = longitude[indices]
-        lon[indices < 0] = np.nan
-        # https://osoceanacoustics.github.io/echopype-examples/echopype_tour.html
-        gps_df = pd.DataFrame({'latitude': lat, 'longitude': lon, 'time1': time1}).set_index(['time1'])
-        gps_gdf = geopandas.GeoDataFrame(
-            gps_df,
-            geometry=geopandas.points_from_xy(gps_df['longitude'], gps_df['latitude']),
-            crs="epsg:4326"
-        )
-        # Returns a FeatureCollection with IDs as "time1"
-        geo_json = gps_gdf.to_json()
+        #################################################################
+        # Get GPS coordinates
+        gps_data, lat, lon = get_gps_data(echodata=echodata)
+        #################################################################
         zarr_path = os.path.join(zarr_prefix, store_name)
         min_echo_range = float(np.nanmin(ds_Sv.echo_range.values[np.nonzero(ds_Sv.echo_range.values)]))
         max_echo_range = float(np.nanmax(ds_Sv.echo_range))
-        num_ping_time_dropna = gps_df.dropna().shape[0]
+        num_ping_time_dropna = lat[~np.isnan(lat)].shape[0]  # symmetric to lon
         start_time = np.datetime_as_string(ds_Sv.ping_time.values[0], unit='ms') + "Z"
         end_time = np.datetime_as_string(ds_Sv.ping_time.values[-1], unit='ms') + "Z"
         channels = list(ds_Sv.channel.values)
-        #
-        if os.path.exists(store_name):
-            print(f'Removing existing zarr directory: {store_name}')
-            shutil.rmtree(store_name)
-        print('Creating Zarr')
-        #
-        # TODO: will this crash if it doesn't write to /tmp directory
-        #
+        #################################################################
+        # Create the zarr store
         ds_Sv.to_zarr(store=store_name)
+        #################################################################
         print('Note: Adding GeoJSON inside Zarr store')
         with open(os.path.join(store_name, 'geo.json'), "w") as outfile:
-            outfile.write(geo_json)
+            outfile.write(gps_data)
+        #################################################################
+        # Verify file counts match
         file_count = get_file_count(store_name=store_name)
-        #################################################################
-        # if ENV[environment] is ENV.PROD:
-        #     print("If PROD use external credential to write to noaa-wcsd-zarr-pds bucket")
-        #     secret = get_secret(secret_name=SECRET_NAME)
-        #     s3_zarr_client = boto3.client(
-        #         service_name='s3',
-        #         aws_access_key_id=secret['NOAA_WCSD_ZARR_PDS_ACCESS_KEY_ID'],
-        #         aws_secret_access_key=secret['NOAA_WCSD_ZARR_PDS_SECRET_ACCESS_KEY'],
-        #     )
-        # else:
-        print("If DEV use regular credentials to write to dev bucket")
-        s3_zarr_client = session.client(service_name='s3', config=client_config)
-        #################################################################
-        raw_zarr_files = get_raw_files(
-            bucket_name=OUTPUT_BUCKET,
-            sub_prefix=os.path.join(zarr_prefix, store_name)
+        raw_zarr_files = get_s3_files(
+            bucket_name=output_bucket,
+            sub_prefix=os.path.join(zarr_prefix, store_name),
+            access_key_id=os.getenv('ACCESS_KEY_ID'),
+            secret_access_key=os.getenv('SECRET_ACCESS_KEY'),
         )
+        #################################################################
+        # Check if files exist
         if len(raw_zarr_files) == file_count and not OVERWRITE:
             # if PROCESSING but there are already files there and OVERWRITE is false
-            print(f'objects: {store_name} already exist in {OUTPUT_BUCKET} with proper count {file_count}.')
+            print(f'objects: {store_name} already exist in {output_bucket} with proper count {file_count}.')
             write_to_table(
                 prefix=prefix,
                 cruise_name=cruise_name,
                 sensor_name=sensor_name,
                 ship_name=ship_name,
                 file_name=file_name,
-                zarr_bucket=OUTPUT_BUCKET,
+                zarr_bucket=output_bucket,
                 zarr_path=zarr_path,
                 min_echo_range=min_echo_range,
                 max_echo_range=max_echo_range,
@@ -469,100 +606,69 @@ def main(
                 frequencies=frequencies,
                 channels=channels,
             )
-            continue
+            continue  # TODO: change continue to return
         if len(raw_zarr_files) > 0:
-            print(f'{len(raw_zarr_files)} objects already exist at {store_name} in {OUTPUT_BUCKET}. Deleting.')
-            delete_remote(raw_zarr_files=raw_zarr_files, output_bucket=OUTPUT_BUCKET, s3_zarr_client=s3_zarr_client)
+            print(f'{len(raw_zarr_files)} objects already exist at {store_name} in {output_bucket}. Deleting.')
+            delete_remote_objects(
+                raw_zarr_files=raw_zarr_files,
+                output_bucket=output_bucket,
+                access_key_id=os.getenv('ACCESS_KEY_ID'),
+                secret_access_key=os.getenv('SECRET_ACCESS_KEY'),
+            )
         #
         print('Uploading files')
-        upload_files(
+        upload_zarr_store_to_s3(  # TODO: Get time metrics for this...
             local_directory=store_name,
-            bucket=OUTPUT_BUCKET,
+            bucket_name=output_bucket,
             object_prefix=zarr_prefix,
-            s3_client=s3_zarr_client
+            access_key_id=os.getenv('ACCESS_KEY_ID'),
+            secret_access_key=os.getenv('SECRET_ACCESS_KEY'),
         )
-        # Verify number of remote zarr files.
-        num_raw_files = len(get_raw_files(
-            bucket_name=OUTPUT_BUCKET,
-            sub_prefix=os.path.join(zarr_prefix, store_name)
-        ))
-        if not num_raw_files == file_count:
+        #################################################################
+        # Verify number of remote zarr files
+        raw_files_output_bucket = get_s3_files(
+            bucket_name=output_bucket,
+            sub_prefix=os.path.join(zarr_prefix, store_name),
+            access_key_id=os.getenv('ACCESS_KEY_ID'),
+            secret_access_key=os.getenv('SECRET_ACCESS_KEY'),
+        )
+        if not len(raw_files_output_bucket) == file_count:
             raise
-        if os.path.exists(store_name):
-            print(f'Removing zarr directory: {store_name}')
-            shutil.rmtree(store_name)
-        #
-        # Write to DynamoDB
-        #
+        delete_all_local_raw_and_zarr_files()
+        #################################################################
+        # Update table with stats
         write_to_table(
             prefix=prefix,
             cruise_name=cruise_name,
             sensor_name=sensor_name,
             ship_name=ship_name,
             file_name=file_name,
-            zarr_bucket=OUTPUT_BUCKET,
+            zarr_bucket=output_bucket,
             zarr_path=zarr_path,
             min_echo_range=min_echo_range,
             max_echo_range=max_echo_range,
             num_ping_time_dropna=num_ping_time_dropna,
             start_time=start_time,
             end_time=end_time,
+            pipeline_status='SUCCESS',
             frequencies=frequencies,
             channels=channels,
         )
         #
         print(f'Done processing {raw_file}')
+        #################################################################
 
 
 def lambda_handler(event: dict, context: dict) -> dict:
-    print("Processing bucket: {event['bucket']}, key: {event['key']}.")
-    message = "Processing bucket: {event['bucket']}, key: {event['key']}."
     main(
-        environment=os.environ['ENV'],  # DEV or TEST
-        prefix=os.environ['PREFIX'],    # unique to each cloudformation deployment
-        ship_name=os.environ['SHIP'],
-        cruise_name=os.environ['CRUISE'],
-        sensor_name=os.environ['SENSOR']
+        prefix='rudy',
+        ship_name='Henry_B._Bigelow',
+        cruise_name='HB0707',
+        sensor_name='EK60',
+        input_bucket="noaa-wcsd-pds",
+        output_bucket="noaa-wcsd-zarr-pds",
+        input_file="",
     )
-    return {'message': message}
+    return {}
 
-######################################################################
-# >>> echodata
-# <EchoData: standardized raw data from Internal Memory>
-# Top-level: contains metadata about the SONAR-netCDF4 file format.
-# ├── Environment: contains information relevant to acoustic propagation through water.
-# ├── Platform: contains information about the platform on which the sonar is installed.
-# │   └── NMEA: contains information specific to the NMEA protocol.
-# ├── Provenance: contains metadata about how the SONAR-netCDF4 version of the data were obtained.
-# ├── Sonar: contains sonar system metadata and sonar beam groups.
-# │   └── Beam_group1: contains backscatter data (either complex samples or uncalibrated power samples) and other...
-# └── Vendor_specific: contains vendor-specific information about the sonar and the data.
-# >>>
-# >>> ds_Sv = ep.calibrate.compute_Sv(echodata)
-# >>> ds_Sv
-# <xarray.Dataset>
-# Dimensions:                (channel: 2, range_sample: 2615, ping_time: 67007,
-#                             filenames: 1, time3: 67007)
-# Coordinates:
-#   * channel                (channel) <U34 'GPT  18 kHz 00907203398a 2 ES18-11...
-#   * range_sample           (range_sample) int64 0 1 2 3 ... 2611 2612 2613 2614
-#   * ping_time              (ping_time) datetime64[ns] 2008-04-09T12:29:34.685...
-#   * filenames              (filenames) int64 0
-#   * time3                  (time3) datetime64[ns] 2008-04-09T12:29:34.6850001...
-# Data variables:
-#     Sv                     (channel, ping_time, range_sample) float64 -1.215 ...
-#     echo_range             (channel, ping_time, range_sample) float64 0.0 ......
-#     frequency_nominal      (channel) float64 1.8e+04 3.8e+04
-#     sound_speed            (channel, ping_time) float64 1.494e+03 ... 1.494e+03
-#     sound_absorption       (channel, ping_time) float64 0.002665 ... 0.009785
-#     sa_correction          (ping_time, channel) float64 0.0 0.0 0.0 ... 0.0 0.0
-#     gain_correction        (ping_time, channel) float64 22.9 21.5 ... 22.9 21.5
-#     equivalent_beam_angle  (channel, ping_time) float64 -17.0 -17.0 ... -15.5
-#     source_filenames       (filenames) <U74 's3://noaa-wcsd-pds/data/raw/Alba...
-#     water_level            (channel, time3) float64 0.0 0.0 0.0 ... 0.0 0.0 0.0
-# Attributes:
-#     processing_software_name:     echopype
-#     processing_software_version:  0.6.3
-#     processing_time:              2023-03-14T20:21:18Z
-#     processing_function:          calibrate.compute_Sv
 ######################################################################

@@ -12,6 +12,7 @@ from numcodecs import Blosc
 import zarr
 import pandas as pd
 from enum import Enum
+
 ENV = Enum("ENV", ["DEV", "PROD"])
 
 # aws --profile=echofish --region=us-east-1 secretsmanager get-resource-policy --secret-id="NOAA_WCSD_ZARR_PDS_BUCKET"
@@ -23,13 +24,7 @@ SECRET_NAME = "NOAA_WCSD_ZARR_PDS_BUCKET"
 PREFIX = 'RUDY'
 
 client_config = botocore.config.Config(max_pool_connections=max_pool_connections)
-transfer_config = boto3.s3.transfer.TransferConfig(
-    max_concurrency=100,
-    num_download_attempts=5,
-    max_io_queue=100,
-    use_threads=True,
-    max_bandwidth=None
-)
+transfer_config = boto3.s3.transfer.TransferConfig(max_concurrency=100)
 
 s3 = session.client(service_name='s3', config=client_config)  # good
 #s3_resource = session.resource(service_name='s3')  # bad
@@ -61,6 +56,17 @@ def upload_files(
             except ClientError as e:
                 # logging.error(e)
                 print(e)
+    # Verify count of the files uploaded
+    count = 0
+    for subdir, dirs, files in os.walk(store_name):
+        count += len(files)
+    raw_zarr_files = get_raw_files(
+        bucket_name=OUTPUT_BUCKET,
+        sub_prefix=os.path.join(zarr_prefix, store_name)
+    )
+    if len(raw_zarr_files) != count:
+        print(f'Problem writing {store_name} with proper count {count}.')
+        raise
 
 
 def get_secret(secret_name: str) -> dict:
@@ -201,11 +207,10 @@ def main(
         sensor_name: str='EK60'
 ) -> None:
     #################################################################
-    # TODO: Fix this, should write to one bucket variable
-    if ENV[environment] is ENV.PROD:
-        OUTPUT_BUCKET = 'noaa-wcsd-zarr-pds'  # PROD
-    else:
-        OUTPUT_BUCKET = "noaa-wcsd-pds-index"  # DEV
+    # if ENV[environment] is ENV.PROD:
+    #     OUTPUT_BUCKET = 'noaa-wcsd-zarr-pds'  # PROD
+    # else:
+    #     OUTPUT_BUCKET = "noaa-wcsd-pds-index"  # DEV
     #
     df = get_table_as_dataframe(prefix=prefix, ship_name=ship_name, cruise_name=cruise_name, sensor_name=sensor_name)
     #################################################################
@@ -254,22 +259,12 @@ def main(
     #################################################################
     zarr_prefix = os.path.join("data", "processed", ship_name, cruise_name, sensor_name)
     upload_files(
+        # TODO: break out these credentials into multiple ___
         local_directory=store_name,
-        bucket=OUTPUT_BUCKET,
+        bucket=output_bucket,
         object_prefix=zarr_prefix,
         s3_client=s3_zarr_client
     )
-    # Verify count of the files uploaded
-    count = 0
-    for subdir, dirs, files in os.walk(store_name):
-        count += len(files)
-    raw_zarr_files = get_raw_files(
-        bucket_name=OUTPUT_BUCKET,
-        sub_prefix=os.path.join(zarr_prefix, store_name)
-    )
-    if len(raw_zarr_files) != count:
-        print(f'Problem writing {store_name} with proper count {count}.')
-        raise
     if os.path.exists(store_name):
         print(f'Removing local zarr directory: {store_name}')
         shutil.rmtree(store_name)
@@ -286,6 +281,15 @@ def lambda_handler(event: dict, context: dict) -> dict:
         cruise_name=os.environ['CRUISE'],
         sensor_name=os.environ['SENSOR']
     )
+
+# TODO: pass in multiple sets of credentials as optionals
+# Read from bucket: ACCESS_KEY, SECRET_KEY
+# Read from database: ACCESS_KEY, SECRET_KEY
+# Write to bucket: ACCESS_KEY, SECRET_KEY
+
+
+
+
 
 
 # Zarr consolidated write reference:
