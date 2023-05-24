@@ -12,6 +12,7 @@ Parameters:
   LogRetentionInDays:
     Type: Number
     Default: 30
+
   IndexingLambdaImageTag:
     Type: String
     Default: 1.0.0.dev20230523171328
@@ -26,6 +27,61 @@ Parameters:
     MaxValue: 900
     Default: 600
 
+  RawToZarrLambdaImageTag:
+    Type: String
+    Default: 1.0.0.dev20230524153115
+  RawToZarrLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 10240
+  RawToZarrLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 900
+
+  RawToZarrDlqLambdaImageTag:
+    Type: String
+    Default: 1.0.0.dev20230524162855
+  RawToZarrDlqLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 2048
+  RawToZarrDlqLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 600
+
+  CreateEmptyZarrStoreLambdaImageTag:
+    Type: String
+    Default: 1.0.0.dev20230524182219
+  CreateEmptyZarrStoreLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 2048
+  CreateEmptyZarrStoreLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 600
+
+  ResampleAndWriteToZarrStoreLambdaImageTag:
+    Type: String
+    Default: 1.0.0.dev20230524192731
+  ResampleAndWriteToZarrStoreLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 2048
+  ResampleAndWriteToZarrStoreLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 600
 
 
 
@@ -43,6 +99,66 @@ Resources:
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/indexing-lambda-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  RawToZarrLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        RolePermissionsBoundary: !Ref RolePermissionsBoundary
+        LogRetentionInDays: !Ref LogRetentionInDays
+        ImageTag: !Ref RawToZarrLambdaImageTag
+        MemorySize: !Ref RawToZarrLambdaMemorySize
+        Timeout: !Ref RawToZarrLambdaTimeout
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-lambda-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  RawToZarrDlqLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        RolePermissionsBoundary: !Ref RolePermissionsBoundary
+        LogRetentionInDays: !Ref LogRetentionInDays
+        ImageTag: !Ref RawToZarrDlqLambdaImageTag
+        MemorySize: !Ref RawToZarrDlqLambdaMemorySize
+        Timeout: !Ref RawToZarrDlqLambdaTimeout
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-dlq-lambda-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  CreateEmptyZarrStoreLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        RolePermissionsBoundary: !Ref RolePermissionsBoundary
+        LogRetentionInDays: !Ref LogRetentionInDays
+        ImageTag: !Ref CreateEmptyZarrStoreLambdaImageTag
+        MemorySize: !Ref CreateEmptyZarrStoreLambdaMemorySize
+        Timeout: !Ref CreateEmptyZarrStoreLambdaTimeout
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/create-empty-zarr-store-lambda-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  ResampleAndWriteToZarrStoreLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        RolePermissionsBoundary: !Ref RolePermissionsBoundary
+        LogRetentionInDays: !Ref LogRetentionInDays
+        ImageTag: !Ref ResampleAndWriteToZarrStoreLambdaImageTag
+        MemorySize: !Ref ResampleAndWriteToZarrStoreLambdaMemorySize
+        Timeout: !Ref ResampleAndWriteToZarrStoreLambdaTimeout
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/resample-and-write-to-zarr-store-lambda-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 

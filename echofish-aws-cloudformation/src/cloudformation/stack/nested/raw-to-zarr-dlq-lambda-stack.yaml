@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: EchoFish Indexing Lambda
+Description: EchoFish Raw To Zarr DLQ Lambda
 
 Parameters:
   RolePermissionsBoundary:
@@ -59,7 +59,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       Code:
-        ImageUri: !Sub 118234403147.dkr.ecr.us-west-2.amazonaws.com/echofish-aws-indexing-lambda:${ImageTag}
+        ImageUri: !Sub 118234403147.dkr.ecr.us-west-2.amazonaws.com/echofish-aws-raw-to-zarr-dlq-lambda:${ImageTag}
       PackageType: Image
       MemorySize: !Ref MemorySize
       Timeout: !Ref Timeout
@@ -70,7 +70,7 @@ Resources:
   EC2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/ec2/${AWS::StackName}/indexing-lambda
+      LogGroupName: !Sub /aws/ec2/${AWS::StackName}/raw-to-zarr-dlq-lambda
       RetentionInDays: !Ref LogRetentionInDays
 
 
