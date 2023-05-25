@@ -113,24 +113,56 @@ def get_table_as_dataframe(
 
 #####################################################################
 
+# TODO: need to pass in key/secret as optionals
+def read_s3_zarr_store(
+        s3_zarr_store_path: str='s3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr'
+) -> xr.core.dataset.Dataset:
+    """Reads an existing Zarr store in a s3 bucket.
 
+    Parameters
+    ----------
+    s3_zarr_store_path : str
+        S3 path to the Zarr store.
+
+    Returns
+    -------
+    Dataset : xarray.core.dataset.Dataset
+        File-level Zarr store opened as Xarray Dataset.
+
+    Notes
+    -----
+    # import zarr
+    # # Persistence mode: 'r' means read only (must exist); 'r+' means read/write (must exist);
+    # z = zarr.open(store, mode="r+") # 'r+' means read/write (must exist)
+    # z.Sv[:].shape
+    # # (5208, 89911, 4)
+    """
+    s3_fs = s3fs.S3FileSystem(
+        key=os.getenv('ACCESS_KEY_ID'),  # optional parameter
+        secret=os.getenv('SECRET_ACCESS_KEY'),
+    )
+    store = s3fs.S3Map(root=s3_zarr_store_path, s3=s3_fs, check=False)
+    return xr.open_zarr(store=store, synchronizer=SYNCHRONIZER, consolidated=True)
+
+# TODO: will need to input just the zarr store name,
 
 def main(
-    prefix: str = 'rudy'
-    ship_name: str = 'Henry_B._Bigelow'
-    cruise_name: str = 'HB0707'
-    sensor_name: str = 'EK60'
-    # input_zarr_bucket: str = 'noaa-wcsd-zarr-pds'
-    # input_zarr_path: str = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T210709.zarr'
-    output_zarr_bucket: str = 'noaa-wcsd-zarr-pds'
-    output_zarr_path: str = 'level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr'
-    zarr_synchronizer: Union[str, None] = None
+    prefix: str = 'rudy',
+    ship_name: str = 'Henry_B._Bigelow',
+    cruise_name: str = 'HB0707',
+    sensor_name: str = 'EK60',
+    input_zarr_path: str = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T210709.zarr',
+    output_zarr_bucket: str = 'noaa-wcsd-zarr-pds',
+    output_zarr_path: str = 'level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr',
+    zarr_synchronizer: Union[str, None] = None,
 ) -> None:
+    # https://github.com/oftfrfbf/watercolumn/blob/master/scripts/zarr_upsample.py
     #################################################################
     """This Lambda runs once per file-level Zarr store. It begins by
     resampling the data for a file-level Zarr store. It then gets
     data from DynamoDB to determine time indicies for where in the larger
-    cruise-level Zarr store to write the regridded subset of Zarr data.
+    cruise-level Zarr store to write the regridded subset of file-level
+    Zarr data.
 
     Parameters
     ----------
@@ -198,103 +230,36 @@ def main(
     end_ping_time_index = int(start_ping_time_index + df.iloc[index]['NUM_PING_TIME_DROPNA'])
     #################################################################
     #################################################################
-    # [1] read cruise level zarr store using xarray for writing #####
-#### TO TEST ZARR STORE IN S3 ####
-client_config = Config(max_pool_connections=MAX_POOL_CONNECTIONS)
-session = boto3.Session(); print(session.profile_name)
-s3 = session.client(
-    service_name='s3',
-    config=client_config,
-    access_key_id=os.getenv('ACCESS_KEY_ID'),
-    secret_access_key=os.getenv('SECRET_ACCESS_KEY'),
-)
-s3_fs = s3fs.S3FileSystem(
-    key=os.getenv('ACCESS_KEY_ID'),  # optional parameter
-    secret=os.getenv('SECRET_ACCESS_KEY'),
-)
-print(s3_fs.session.profile)
-store = s3fs.S3Map(root=f's3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr', s3=s3_fs, check=False)
-dstest = xr.open_zarr(store=store, synchronizer=SYNCHRONIZER, consolidated=True)
-## Persistence mode: 'r' means read only (must exist); 'r+' means read/write (must exist); 'a' means read/write (create if doesn't exist); 'w' means create (overwrite if exists); 'w-' means create
-# import zarr
-# z = zarr.open(store, mode="r+") # 'r+' means read/write (must exist)
-# z.Sv[:].shape
-# # (5208, 89911, 4)
-# type(z.Sv)
-################################################
-
-    s3 = s3fs.S3FileSystem()
-    file_basename = os.path.basename(file_name).split('.')[0]
-
-    s3 = s3fs.S3FileSystem(key=os.environ('ACCESS_KEY_ID'), secret=os.environ('SECRET_ACCESS_KEY'))
-    store = s3fs.S3Map(
-        root=f's3://{INPUT_BUCKET}/data/processed/{ship_name}/{cruise_name}/{sensor_name}/{file_basename}.zarr',
-        s3=s3,
-        check=False
+    # [1] read file-level Zarr store using xarray
+    file_level_zarr_store = read_s3_zarr_store(
+        s3_zarr_store_path=f's3://{input_zarr_bucket}/{input_zarr_path}'
     )
-    ds_cruise = xr.open_zarr(store=store, consolidated=False)  # <- cruise level zarr store
-
-
-# https://github.com/oftfrfbf/watercolumn/blob/master/scripts/zarr_upsample.py
-#
-#
-#
-#
-# [2] read file level zarr store ####################################
-# s3 = s3fs.S3FileSystem(anon=True)
-WCSD_ZARR_BUCKET_NAME = 'noaa-wcsd-zarr-pds'
-store = s3fs.S3Map(
-    root=f's3://{WCSD_ZARR_BUCKET_NAME}/data/raw/Henry_B._Bigelow/HB0707/EK60/{os.path.splitext(os.path.basename(test_file))[0]}.zarr',
-    s3=s3,
-    check=False
-)
-ds_file = xr.open_zarr(store=store, consolidated=True)  # <- file level zarr store
-# TODO: PROBLEM, ds_file is missing latitude/longitude/timestamp information
-
-#########################################################################
-# [2] extract gps and time coordinate from file level zarr store ####################################
-# use this: https://osoceanacoustics.github.io/echopype-examples/echopype_tour.html
-
-# TODO: fix this for private bucket access
-s3_geo_json = s3fs.S3Map(
-    root=f's3://noaa-wcsd-zarr-pds/data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr/geo.json',
-    s3=s3_fs,
-    check=False
-) # This does not work
-# This works
-geo_json = geopandas.read_file(f's3://noaa-wcsd-zarr-pds/data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr/geo.json')
-# TODO: get concave hull with https://pypi.org/project/alphashape/
-
-#########################################################################
-# [3A] open file-level Zarr store ####################################
-s3 = s3fs.S3FileSystem(key=os.getenv('ACCESS_KEY_ID'), secret=os.getenv('SECRET_ACCESS_KEY'))
-store = s3fs.S3Map(
-    root=f's3://{input_zarr_bucket}/{input_zarr_path}',
-    s3=s3,
-    check=False
-)
-file_zarr = xr.open_zarr(store=store, consolidated=False)
-
-#########################################################################
-# [4] open cruise level zarr store for writing
-import s3fs; import os
-s3_fs = s3fs.S3FileSystem(
-    key=os.getenv('ACCESS_KEY_ID'),  # optional parameter
-    secret=os.getenv('SECRET_ACCESS_KEY'),
-)
-print(s3_fs.session.profile)
-store = s3fs.S3Map(root=f's3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr', s3=s3_fs, check=False)
-import xarray as xr
-cruise_zarr = xr.open_zarr(store=store, synchronizer=None, consolidated=True)
-
+    #########################################################################
+    # [2] extract gps and time coordinate from file-level Zarr store
+    # reference: https://osoceanacoustics.github.io/echopype-examples/echopype_tour.html
+    # TODO: fix this for private bucket access
+    geo_json = geopandas.read_file(f's3://noaa-wcsd-zarr-pds/data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr/geo.json')
+    # TODO: get concave hull with https://pypi.org/project/alphashape/
+    #########################################################################
+    # [4] open cruise level zarr store for writing
+    # TODO: need to open with Zarr library, not xarray!
+    import s3fs; import os
+    s3_fs = s3fs.S3FileSystem(
+        key=os.getenv('ACCESS_KEY_ID'),  # TODO: treat as optional parameter
+        secret=os.getenv('SECRET_ACCESS_KEY'),
+    )
+    print(s3_fs.session.profile)
+    store = s3fs.S3Map(root=f's3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr', s3=s3_fs, check=False)
+    import xarray as xr
+    cruise_zarr = xr.open_zarr(store=store, synchronizer=None, consolidated=True)
 #########################################################################
 # [5] Get indexing correct so that we can
 # https://github.com/oftfrfbf/watercolumn/blob/8b7ed605d22f446e1d1f3087971c31b83f1b5f4c/scripts/scan_watercolumn_bucket_by_size.py#L138
 total_width_traversed = 0
-
 index = df.index[df['ZARR_PATH'] == zarr_path][0]
-print(index)
+ping_time_cumsum = np.insert( np.cumsum( df['NUM_PING_TIME_DROPNA'].to_numpy(dtype=int) ), obj=0, values=0 )
 start_ping_time_index = np.cumsum(df.iloc[:index]['NUM_PING_TIME_DROPNA']).values[-1]
+
 end_ping_time_index = int(start_ping_time_index + df.iloc[index]['NUM_PING_TIME_DROPNA'])
 
 width = ds_temp.Sv.ping_time.shape[0] # ds_temp.Sv.shape[1]

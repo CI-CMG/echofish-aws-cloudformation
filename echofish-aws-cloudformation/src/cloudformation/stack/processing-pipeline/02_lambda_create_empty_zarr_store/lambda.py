@@ -245,7 +245,6 @@ def create_zarr_store(
     None : None
         None.
     """
-    # Creates an empty Zarr store for cruise level visualization
     compressor = Blosc(cname="zstd", clevel=5, shuffle=Blosc.BITSHUFFLE)
     store = zarr.DirectoryStore(path=store_name)  # TODO: write directly to s3?
     root = zarr.group(store=store, path="/", overwrite=True)
