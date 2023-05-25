@@ -13,18 +13,36 @@ from datetime import datetime
 from botocore.config import Config
 from botocore.exceptions import ClientError
 from collections.abc import Generator
+from enum import Enum
+
 
 FILE_SUFFIX = '.raw'
 OVERWRITE = True
 MAX_POOL_CONNECTIONS = 64
 MAX_CONCURRENCY = 100
-# tempfile.gettempdir()
-TEMPDIR = "/tmp"
+TEMPDIR = "/tmp"  # tempfile.gettempdir()
+
+
+# TODO: Add methods for updating errors as FAILURE in DynamoDB
+
+#####################################################################
+class PIPELINE_STATUS(Enum):
+    '''Keywords used to denote processing status in DynamoDB'''
+    PROCESSING = 'PROCESSING'
+    SUCCESS = 'SUCCESS'
+    FAILURE = 'FAILURE'
+
 
 #####################################################################
 def delete_all_local_raw_and_zarr_files() -> None:
-    # Used to clean up any residual files from warm lambdas
-    # to keep storage footprint low
+    """Used to clean up any residual files from warm lambdas
+    to keep the storage footprint below the 512 MB allocation.
+
+    Returns
+    -------
+    None : None
+        No return value.
+    """
     for i in ['*.raw*', '*.zarr']:
         for j in glob.glob(i):
             print(f'Deleting {j}')
@@ -32,6 +50,7 @@ def delete_all_local_raw_and_zarr_files() -> None:
                 shutil.rmtree(j, ignore_errors=True)
             elif os.path.isfile(j):
                 os.remove(j)
+
 
 #####################################################################
 def download_raw_file(
@@ -47,8 +66,9 @@ def download_raw_file(
         Config=TransferConfig(max_concurrency=MAX_CONCURRENCY)
     )
 
+
 #####################################################################
-def chunks(
+def chunked(
         ll: list,
         n: int
 ) -> Generator:
@@ -68,6 +88,7 @@ def chunks(
     """
     for i in range(0, len(ll), n):
         yield ll[i:i + n]
+
 
 #####################################################################
 def delete_remote_objects(
@@ -106,7 +127,7 @@ def delete_remote_objects(
     for raw_zarr_file in raw_zarr_files:
         objects_to_delete.append({'Key': raw_zarr_file['Key']})
     # Delete in groups of 100 -- Boto3 constraint.
-    for batch in chunks(objects_to_delete, 100):
+    for batch in chunked(objects_to_delete, 100):
         # print(f"0: {batch[0]}, -1: {batch[-1]}")
         deleted = s3.delete_objects(
             Bucket=output_bucket,
@@ -115,6 +136,7 @@ def delete_remote_objects(
             }
         )
         print(f"Deleted {len(deleted['Deleted'])} files")
+
 
 #####################################################################
 def find_children_objects(
@@ -155,6 +177,7 @@ def find_children_objects(
     for page in page_iterator:
         objects.extend(page['Contents'])
     return objects
+
 
 #####################################################################
 def upload_zarr_store_to_s3(
@@ -207,6 +230,7 @@ def upload_zarr_store_to_s3(
             except ClientError as e:
                 # logging.error(e)
                 print(e)
+
 
 #####################################################################
 def get_s3_files(
@@ -304,23 +328,24 @@ def create_table(
     else:
         print('Table exists already.')
 
+
 #####################################################################
 def write_to_table(
-    prefix: str,
-    cruise_name: str,
-    sensor_name: str,
-    ship_name: str,
-    file_name: str,
-    zarr_bucket: str,
-    zarr_path: str,
-    min_echo_range: float,
-    max_echo_range: float,
-    num_ping_time_dropna: int,
-    start_time: str,
-    end_time: str,
-    pipeline_status: str,
-    frequencies: list,
-    channels: list,
+        prefix: str,
+        cruise_name: str,
+        sensor_name: str,
+        ship_name: str,
+        file_name: str,
+        zarr_bucket: str,
+        zarr_path: str,
+        min_echo_range: float,
+        max_echo_range: float,
+        num_ping_time_dropna: int,
+        start_time: str,
+        end_time: str,
+        pipeline_status: str,
+        frequencies: list,
+        channels: list,
 ) -> None:
     # HASH: FILE_NAME, RANGE: SENSOR_NAME
     dynamodb = boto3.Session().client(service_name='dynamodb')
@@ -351,14 +376,15 @@ def write_to_table(
     except Exception as e:
         print(f"Error updating table: {e}")
 
+
 #####################################################################
 def set_processing_status(
-    prefix: str,
-    ship_name: str,
-    cruise_name: str,
-    sensor_name: str,
-    file_name: str,  # Hash
-    new_status: str,  # TODO: change to enum?
+        prefix: str,
+        ship_name: str,
+        cruise_name: str,
+        sensor_name: str,
+        file_name: str,  # Hash
+        new_status: str,  # TODO: change to enum?
 ) -> None:
     # Updates PIPELINE_STATUS via new_status value
     # HASH: FILE_NAME, RANGE: SENSOR_NAME
@@ -377,6 +403,7 @@ def set_processing_status(
     )
     status_code = response['ResponseMetadata']['HTTPStatusCode']
     assert(status_code == 200), "Unable to update dynamodb table"
+
 
 #####################################################################
 def get_processing_status(
@@ -409,7 +436,7 @@ def get_file_count(
         store_name: str
 ) -> int:
     """Get a count of files in the local Zarr store. Hopefully this
-    can be improved upon as this is currently a very crude checksum
+    can be improved upon as this is currently a _very_ crude checksum
     to ensure that all files are being read & written properly.
 
     Parameters
@@ -426,6 +453,7 @@ def get_file_count(
     for subdir, dirs, files in os.walk(store_name):
         count += len(files)
     return count
+
 
 #####################################################################
 def get_gps_data(
@@ -487,6 +515,31 @@ def get_gps_data(
     return geo_json, lat, lon
 
 
+#####################################################################
+def write_geojson_to_file(
+        path: str,
+        data: str
+) -> None:
+    """Write the GeoJSON file inside the Zarr store folder. Note that the
+    file is not a technical part of the store, this is more of a hack
+    to help pass the data along to the next processing step.
+
+    Parameters
+    ----------
+    path : str
+        The path to a local Zarr store where the file will be written.
+    data : str
+        A GeoJSON Feature Collection to be written to output file.
+
+    Returns
+    -------
+    None : None
+        No return value.
+    """
+    with open(os.path.join(path, 'geo.json'), "w") as outfile:
+        outfile.write(data)
+
+
 def main(
         prefix: str='rudy',
         ship_name: str='Henry_B._Bigelow',
@@ -495,8 +548,37 @@ def main(
         input_bucket: str="noaa-wcsd-pds",
         #output_bucket: str="noaa-wcsd-pds-index",  # "noaa-wcsd-zarr-pds",
         output_bucket: str="noaa-wcsd-zarr-pds",  # "noaa-wcsd-zarr-pds",
-        input_file: str="D20070711-T182032.raw",
+        input_file: str="D20070711-T182032.raw",  # TODO: integrate this...
 ) -> None:
+    """This Lambda reads a raw Echosounder file from a s3 location. Calibrates
+    & computes the Sv intensity values and then generates a Zarr store from the
+    data. Adds a supplementary GeoJSON file to Zarr store and writes all the data
+    out to a specified bucket. The processing status is updated in a cruise level
+    curated DynamoDB.
+
+    Parameters
+    ----------
+    prefix : str
+        The desired prefix for this specific deployment of the template.
+    ship_name : str
+        Name of the ship, e.g. Henry_B._Bigelow.
+    cruise_name : str
+        Name of the cruise, e.g. HB0707.
+    sensor_name : str
+        The type of echosounder, e.g. EK60.
+    input_bucket : str
+        Bucket where raw files are read from, e.g. AWS noaa-wcsd-pds bucket.
+    output_bucket : str
+        Bucket where files are written to. Can be the NOAA NODD bucket if the
+        proper credentials are provided.
+    input_file : str
+        The specific file to be processed, e.g. D20070711-T182032.raw.
+
+    Returns
+    -------
+    None : None
+        None
+    """
     #################################################################
     # AWS Lambda requires writes only in /tmp directory
     os.chdir(TEMPDIR)
@@ -532,7 +614,7 @@ def main(
             file_name=file_name,
             cruise_name=cruise_name
         )
-        if processing_status == 'SUCCESS' and not OVERWRITE:
+        if processing_status == PIPELINE_STATUS.SUCCESS.value and not OVERWRITE:
             print('Already processed as SUCCESS, skipping...') # TODO: change continue to 'return'
             continue
         set_processing_status(
@@ -541,7 +623,7 @@ def main(
             cruise_name=cruise_name,
             sensor_name=sensor_name,
             file_name=file_name,
-            new_status="PROCESSING",
+            new_status=PIPELINE_STATUS.PROCESSING.value,
         )
         #################################################################
         delete_all_local_raw_and_zarr_files()
@@ -574,8 +656,7 @@ def main(
         ds_Sv.to_zarr(store=store_name)
         #################################################################
         print('Note: Adding GeoJSON inside Zarr store')
-        with open(os.path.join(store_name, 'geo.json'), "w") as outfile:
-            outfile.write(gps_data)
+        write_geojson_to_file(path=store_name, data=gps_data)
         #################################################################
         # Verify file counts match
         file_count = get_file_count(store_name=store_name)
@@ -603,6 +684,7 @@ def main(
                 num_ping_time_dropna=num_ping_time_dropna,
                 start_time=start_time,
                 end_time=end_time,
+                pipeline_status=PIPELINE_STATUS.SUCCESS.value,
                 frequencies=frequencies,
                 channels=channels,
             )
@@ -625,7 +707,7 @@ def main(
             secret_access_key=os.getenv('SECRET_ACCESS_KEY'),
         )
         #################################################################
-        # Verify number of remote zarr files
+        # Verify # of remote zarr files equals # of local files
         raw_files_output_bucket = get_s3_files(
             bucket_name=output_bucket,
             sub_prefix=os.path.join(zarr_prefix, store_name),
@@ -650,7 +732,7 @@ def main(
             num_ping_time_dropna=num_ping_time_dropna,
             start_time=start_time,
             end_time=end_time,
-            pipeline_status='SUCCESS',
+            pipeline_status=PIPELINE_STATUS.SUCCESS.value,
             frequencies=frequencies,
             channels=channels,
         )
@@ -659,6 +741,7 @@ def main(
         #################################################################
 
 
+#########################################################################
 def lambda_handler(event: dict, context: dict) -> dict:
     main(
         prefix='rudy',
@@ -667,8 +750,8 @@ def lambda_handler(event: dict, context: dict) -> dict:
         sensor_name='EK60',
         input_bucket="noaa-wcsd-pds",
         output_bucket="noaa-wcsd-zarr-pds",
-        input_file="",
+        input_file="D20070711-T182032.raw",
     )
     return {}
 
-######################################################################
+#########################################################################
