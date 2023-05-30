@@ -162,3 +162,14 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
+  DynamoDbStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        StackPrefix: !Ref StackPrefix
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/dynamo-db-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+

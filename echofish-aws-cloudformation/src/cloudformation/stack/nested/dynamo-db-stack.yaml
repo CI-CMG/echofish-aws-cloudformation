@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EchoFish DynamoDB configuration
+
+Parameters:
+  StackPrefix:
+    Description: A prefix that identifies this stack
+    Type: String
+
+Resources:
+
+  IndexTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      TableName: !Sub ${StackPrefix}-EchoFish-Index
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: CRUISE
+          AttributeType: S
+        - AttributeName: SHIP
+          AttributeType: S
+      KeySchema:
+        - AttributeName: CRUISE
+          KeyType: HASH
+        - AttributeName: SHIP
+          KeyType: RANGE
+
+  FileInfoTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Delete
+    Properties:
+      TableName: !Sub ${StackPrefix}-EchoFish-File-Info
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: FILE_NAME
+          AttributeType: S
+        - AttributeName: CRUISE_NAME
+          AttributeType: S
+      KeySchema:
+        - AttributeName: FILE_NAME
+          KeyType: HASH
+        - AttributeName: CRUISE_NAME
+          KeyType: RANGE
+
+Outputs:
+  IndexTable:
+    Value: !Ref IndexTable
+  FileInfoTable:
+    Value: !Ref FileInfoTable
