@@ -1,0 +1,22 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: EchoFish Topics and Queues
+
+
+Resources:
+
+  IndexLambdaTopic:
+    Type: AWS::SNS::Topic
+
+  IndexLambdaQueue:
+    Type: AWS::SQS::Queue
+
+Outputs:
+  IndexLambdaTopicArn:
+    Value: !Ref IndexLambdaTopic
+  IndexLambdaQueueArn:
+    Value: !GetAtt IndexLambdaQueue.Arn
+
+
+
+
+

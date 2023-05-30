@@ -173,3 +173,34 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
+  MessagingStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/messaging-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  MessagingSubscriptionStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        IndexLambdaName:
+          Fn::GetAtt:
+            - IndexingLambdaStack
+            - Outputs.LambdaName
+        IndexLambdaTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.IndexLambdaTopicArn
+        IndexLambdaQueueArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.IndexLambdaQueueArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/messaging-subscription-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
