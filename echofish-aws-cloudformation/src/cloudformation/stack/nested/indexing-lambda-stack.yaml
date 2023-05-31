@@ -15,6 +15,16 @@ Parameters:
     Type: Number
   Timeout:
     Type: Number
+  IndexTableName:
+    Type: String
+  RawSourceBucket:
+    Type: String
+  CalibrationBucket:
+    Type: String
+  CalibrationFileKey:
+    Type: String
+  IndexLambdaQueueArn:
+    Type: String
 
 Conditions:
   HasPermissionsBoundary:
@@ -53,6 +63,17 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
+        - PolicyName: SQS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Ref IndexLambdaQueueArn
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
 
 
   Lambda:
@@ -64,13 +85,27 @@ Resources:
       MemorySize: !Ref MemorySize
       Timeout: !Ref Timeout
       Role: !GetAtt LambdaRole.Arn
+      Environment:
+        Variables:
+          INDEX_EK60_TABLE_NAME: !Ref IndexTableName
+          BUCKET_NAME: !Ref RawSourceBucket
+          CALIBRATION_BUCKET: !Ref CalibrationBucket
+          CALIBRATION_KEY: !Ref CalibrationFileKey
 
+
+  Trigger:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn: !Ref IndexLambdaQueueArn
+      FunctionName: !Ref Lambda
 
 
   EC2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/ec2/${AWS::StackName}/indexing-lambda
+      LogGroupName: !Sub /aws/lambda/${Lambda}
       RetentionInDays: !Ref LogRetentionInDays
 
 

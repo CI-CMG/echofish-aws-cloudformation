@@ -2,6 +2,16 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: EchoFish Stack
 
 Parameters:
+  RawSourceBucket:
+    Type: String
+    Default: noaa-wcsd-pds
+  CalibrationBucket:
+    Type: String
+    Default: noaa-wcsd-pds-index
+  CalibrationFileKey:
+    Type: String
+    Default: calibrated_crusies.csv
+
   StackPrefix:
     Description: A prefix that identifies this stack
     Type: String
@@ -15,7 +25,7 @@ Parameters:
 
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230523171328
+    Default: 1.0.0.dev20230531161853
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -87,6 +97,28 @@ Parameters:
 
 Resources:
 
+  DynamoDbStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        StackPrefix: !Ref StackPrefix
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/dynamo-db-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  MessagingStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        StackPrefix: !Ref StackPrefix
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/messaging-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
   IndexingLambdaStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -96,6 +128,17 @@ Resources:
         ImageTag: !Ref IndexingLambdaImageTag
         MemorySize: !Ref IndexingLambdaMemorySize
         Timeout: !Ref IndexingLambdaTimeout
+        IndexTableName:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.IndexTableName
+        RawSourceBucket: !Ref RawSourceBucket
+        CalibrationBucket: !Ref CalibrationBucket
+        CalibrationFileKey: !Ref CalibrationFileKey
+        IndexLambdaQueueArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.IndexLambdaQueueArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/indexing-lambda-stack.yaml
@@ -162,45 +205,4 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
-  DynamoDbStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      Parameters:
-        StackPrefix: !Ref StackPrefix
-      TemplateURL:
-        Fn::Sub:
-          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/dynamo-db-stack.yaml
-          - DeploymentBucketName:
-              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-
-  MessagingStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      TemplateURL:
-        Fn::Sub:
-          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/messaging-stack.yaml
-          - DeploymentBucketName:
-              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-
-  MessagingSubscriptionStack:
-    Type: AWS::CloudFormation::Stack
-    Properties:
-      Parameters:
-        IndexLambdaName:
-          Fn::GetAtt:
-            - IndexingLambdaStack
-            - Outputs.LambdaName
-        IndexLambdaTopicArn:
-          Fn::GetAtt:
-            - MessagingStack
-            - Outputs.IndexLambdaTopicArn
-        IndexLambdaQueueArn:
-          Fn::GetAtt:
-            - MessagingStack
-            - Outputs.IndexLambdaQueueArn
-      TemplateURL:
-        Fn::Sub:
-          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/messaging-subscription-stack.yaml
-          - DeploymentBucketName:
-              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 

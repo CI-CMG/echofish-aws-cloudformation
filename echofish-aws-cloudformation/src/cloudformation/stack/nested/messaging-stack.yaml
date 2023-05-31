@@ -2,13 +2,64 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: EchoFish Topics and Queues
 
 
+Parameters:
+  StackPrefix:
+    Type: String
+
 Resources:
 
   IndexLambdaTopic:
     Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-trigger-index
 
   IndexLambdaQueue:
     Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-index
+#      RedrivePolicy:
+#        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+#        maxReceiveCount: !Ref MessageMaxReceiveCount
+
+  IndexLambdaTopicToIndexLambdaQueue:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: sqs
+      TopicArn: !Ref IndexLambdaTopic
+      Endpoint: !GetAtt IndexLambdaQueue.Arn
+      RawMessageDelivery: true
+
+  IndexLambdaTopicToIndexLambdaQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref IndexLambdaQueue
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublishToTopic
+            Resource: !GetAtt IndexLambdaQueue.Arn
+            Effect: Allow
+            Principal:
+              Service:
+                - sns.amazonaws.com
+            Action:
+              - sqs:SendMessage
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref IndexLambdaTopic
 
 Outputs:
   IndexLambdaTopicArn:

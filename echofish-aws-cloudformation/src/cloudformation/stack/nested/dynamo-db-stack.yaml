@@ -43,7 +43,11 @@ Resources:
           KeyType: RANGE
 
 Outputs:
-  IndexTable:
+  IndexTableName:
     Value: !Ref IndexTable
-  FileInfoTable:
+  IndexTableArn:
+    Value: !GetAtt IndexTable.Arn
+  FileInfoTableName:
     Value: !Ref FileInfoTable
+  FileInfoTableArn:
+    Value: !GetAtt FileInfoTable.Arn
