@@ -175,7 +175,8 @@ def find_children_objects(
     page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=sub_prefix)
     objects = []
     for page in page_iterator:
-        objects.extend(page['Contents'])
+        if 'Contents' in page.keys():
+            objects.extend(page['Contents'])
     return objects
 
 
@@ -196,7 +197,8 @@ def upload_zarr_store_to_s3(
     bucket_name : str
         Name of bucket to read from.
     object_prefix : str
-        Prefix path to give for written objects.
+        Prefix path to give for written objects. An example of the prefix
+        is "/level_1/Henry_B._Bigelow/HB0707/EK60/".
     access_key_id : str
         AWS access key id. Optional.
     secret_access_key : str
@@ -207,6 +209,7 @@ def upload_zarr_store_to_s3(
     None : None
         None
     """
+    print('Upload Zarr store to s3')
     client_config = Config(max_pool_connections=MAX_POOL_CONNECTIONS)
     session = boto3.Session()
     s3 = session.client(
@@ -260,7 +263,7 @@ def get_s3_files(
     objects : list
         List of object names as strings.
     """
-    print('Getting raw files')
+    print('Getting raw s3 files')
     raw_files = []
     try:
         children = find_children_objects(
@@ -292,6 +295,7 @@ def create_table(
         sensor_name: str,
 ) -> None:
     # TODO: TEMPORARY — MOVE TO ORCHESTRATOR
+    print('Creating table')
     dynamodb = boto3.Session().client(service_name='dynamodb')
     table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
     existing_tables = dynamodb.list_tables()['TableNames']
@@ -547,7 +551,7 @@ def main(
         sensor_name: str='EK60',
         input_bucket: str="noaa-wcsd-pds",
         #output_bucket: str="noaa-wcsd-pds-index",  # "noaa-wcsd-zarr-pds",
-        output_bucket: str="noaa-wcsd-zarr-pds",  # "noaa-wcsd-zarr-pds",
+        output_bucket: str="noaa-wcsd-zarr-pds",
         input_file: str="D20070711-T182032.raw",  # TODO: integrate this...
 ) -> None:
     """This Lambda reads a raw Echosounder file from a s3 location. Calibrates
@@ -604,7 +608,10 @@ def main(
         row_split = raw_file.split(os.sep)
         # { ship: 'Okeanos_Explorer', cruise_name: 'EX1608', sensor_name: 'EK60', file_name: 'D20070711-T182032.raw' }
         ship_name, cruise_name, sensor_name, file_name = row_split[-4:]
-        zarr_prefix = os.path.join("data", "raw", ship_name, cruise_name, sensor_name)
+        #
+        # zarr_prefix = os.path.join("data", "raw", ship_name, cruise_name, sensor_name)
+        zarr_prefix = os.path.join("level_1", ship_name, cruise_name, sensor_name)
+        #
         store_name = f"{os.path.splitext(file_name)[0]}.zarr"
         #
         processing_status = get_processing_status(
@@ -615,7 +622,7 @@ def main(
             cruise_name=cruise_name
         )
         if processing_status == PIPELINE_STATUS.SUCCESS.value and not OVERWRITE:
-            print('Already processed as SUCCESS, skipping...') # TODO: change continue to 'return'
+            print('Already processed as SUCCESS, skipping...')  # TODO: change continue to 'return'
             continue
         set_processing_status(
             prefix=prefix,

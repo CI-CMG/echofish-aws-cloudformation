@@ -302,8 +302,7 @@ s3 = s3fs.S3FileSystem(
 # TODO: note the "level_2" path
 store = s3fs.S3Map(root=f's3://{input_zarr_bucket}/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr', s3=s3, check=True)
 import zarr
-z = zarr.open(store=store, mode="r+") # 'r+' means read/write (store must already exist)
-z = zarr.open(store='test.zarr', mode='r+')
+z = zarr.open(store=store, mode="r+")  # 'r+' means read/write (store must already exist)
 #z.latitude[1] = 1.1
 #z.latitude[3] = 3.3
 ### above works ###
