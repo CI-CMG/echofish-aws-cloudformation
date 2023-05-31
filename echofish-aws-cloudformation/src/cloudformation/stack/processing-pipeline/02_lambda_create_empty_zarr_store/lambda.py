@@ -13,6 +13,7 @@ from numcodecs import Blosc
 import zarr
 import pandas as pd
 from enum import Enum
+from dateutil import parser
 
 # TODO: Add logging
 # logging.basicConfig(level=logging.DEBUG)
@@ -219,6 +220,7 @@ def create_zarr_store(
         min_echo_range: float,
         channel: list,
         frequency: list,
+        start_time: str,
 ) -> None:
     """Creates a new and empty Zarr store in a s3 bucket.
 
@@ -239,35 +241,49 @@ def create_zarr_store(
         A list of all the channels associated with the cruise.
     frequency : list
         A list of the frequencies associated with each channel.
+    start_time : str
+        An ISO 8601 string representation for the base time that will be used to
+        store timestamps (e.g. "2007-07-11T18:20:32.656Z"). This will be converted
+        into a cftime.num2date with units as milliseconds since the START_TIME,
+        and use a proleptic_gregorian calendar.
 
     Returns
     -------
     None : None
         None.
     """
+    # store_name='test.zarr'
+    # width=10; height=10; channel=['a', 'b', 'c']
+    ###
     compressor = Blosc(cname="zstd", clevel=5, shuffle=Blosc.BITSHUFFLE)
     store = zarr.DirectoryStore(path=store_name)  # TODO: write directly to s3?
     root = zarr.group(store=store, path="/", overwrite=True)
     args = {'compressor': compressor, 'fill_value': np.nan}
     #####################################################################
-    # Coordinate: Time
-    root.create_dataset(name="/time", shape=width, chunks=TILE_SIZE, dtype='float32', **args)
+    # Coordinate: Time -- no missing values will be included
+    root.create_dataset(name="/time", shape=width, chunks=TILE_SIZE, dtype='float64', **args)
     root.time.attrs['_ARRAY_DIMENSIONS'] = ['time']
+    # Use the first cruise-level file START_TIME to denote the base cftime units
+    root.time.attrs['calendar'] = 'proleptic_gregorian'
+    parsed_start_time = pd.to_datetime(start_time).tz_convert(None)
+    units = f"microseconds since {parsed_start_time.date().isoformat()} {parsed_start_time.time().isoformat()}"
+    # Note: format should look like 'microseconds since 2007-07-11 18:20:32.656000'
+    root.time.attrs['units'] = units
     #####################################################################
-    # Coordinate: Depth
+    # Coordinate: Depth -- float16 == 2 significant digits
     root.create_dataset(name="/depth", shape=height, chunks=TILE_SIZE, dtype='float32', **args)
     root.depth.attrs['_ARRAY_DIMENSIONS'] = ['depth']
     root.depth[:] = np.round(
         np.linspace(start=0, stop=min_echo_range * height, num=height),
         decimals=2
-    )  # Note: "depth" starts at zero inclusive
+    )  # Note: "depth" starts at zero [inclusive]
     #####################################################################
     # Coordinates: Channel
     root.create_dataset(name="/channel", shape=len(channel), chunks=1, dtype='str', **args)
     root.channel.attrs['_ARRAY_DIMENSIONS'] = ['channel']
     root.channel[:] = channel
     #####################################################################
-    # Latitude
+    # Latitude -- float32 == 5 significant digits
     root.create_dataset(name="/latitude", shape=width, chunks=TILE_SIZE, dtype='float32', **args)
     root.latitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
     root.latitude[:] = np.nan
@@ -277,7 +293,7 @@ def create_zarr_store(
     root.longitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
     root.longitude[:] = np.nan
     #####################################################################
-    # Frequency # TODO: include this???
+    # Frequency
     root.create_dataset(name="/frequency", shape=len(frequency), chunks=1, dtype='float32', **args)
     root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['channel']
     root.frequency[:] = frequency
@@ -287,6 +303,7 @@ def create_zarr_store(
         name="/Sv",
         shape=(height, width, len(channel)),
         chunks=(TILE_SIZE, TILE_SIZE, 1),
+        dtype='float16',
         **args
     )
     root.Sv.attrs['_ARRAY_DIMENSIONS'] = ['depth', 'time', 'channel']
@@ -353,6 +370,29 @@ def get_table_as_dataframe(
     return df_success.sort_values(by='START_TIME', ignore_index=True)
 
 
+def get_file_count(
+        store_name: str
+) -> int:
+    """Get a count of files in the local Zarr store. Hopefully this
+    can be improved upon as this is currently a _very_ crude checksum
+    to ensure that all files are being read & written properly.
+
+    Parameters
+    ----------
+    store_name : str
+        A Zarr store in the local directory.
+
+    Returns
+    -------
+    Count of files : int
+        Count of files in the Zarr store.
+    """
+    count = 0  # count number of local zarr files
+    for subdir, dirs, files in os.walk(store_name):
+        count += len(files)
+    return count
+
+
 def main(
         prefix: str='rudy',
         ship_name: str='Henry_B._Bigelow',
@@ -385,6 +425,7 @@ def main(
         None
     """
     #################################################################
+    # aws --profile wcsdzarr s3 rm s3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr/ --recursive
     # AWS Lambda requires writes only in /tmp directory
     os.chdir(TEMPDIR)
     print(os.getcwd())
@@ -422,7 +463,8 @@ def main(
         height=new_height,
         min_echo_range=cruise_min_echo_range,
         channel=cruise_channels,
-        frequency=cruise_frequencies
+        frequency=cruise_frequencies,
+        start_time=df.iloc[0]['START_TIME']
     )
     #################################################################
     zarr_prefix = os.path.join("level_2", ship_name, cruise_name, sensor_name)
@@ -437,9 +479,8 @@ def main(
     # https://noaa-wcsd-zarr-pds.s3.amazonaws.com/index.html
     ###########
     # Verify count of the files uploaded
-    count = 0
-    for subdir, dirs, files in os.walk(store_name):
-        count += len(files)
+    count = get_file_count(store_name=store_name)
+    #
     raw_zarr_files = get_s3_files(
         bucket_name=output_bucket,
         sub_prefix=os.path.join(zarr_prefix, store_name),

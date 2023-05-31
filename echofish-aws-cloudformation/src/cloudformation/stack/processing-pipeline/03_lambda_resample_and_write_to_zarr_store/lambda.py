@@ -225,20 +225,36 @@ def main(
     input_zarr_path = file_info['ZARR_PATH']
     #
     #df.iloc[:index]['NUM_PING_TIME_DROPNA']
-    # TODO: Fix this to accommodate
+    # TODO: Fix this to accommodate ?
     start_ping_time_index = np.cumsum(df.iloc[:index]['NUM_PING_TIME_DROPNA']).values[-1]
     end_ping_time_index = int(start_ping_time_index + df.iloc[index]['NUM_PING_TIME_DROPNA'])
     #################################################################
     #################################################################
     # [1] read file-level Zarr store using xarray
-    file_level_zarr_store = read_s3_zarr_store(
+    file_zarr = read_s3_zarr_store(
         s3_zarr_store_path=f's3://{input_zarr_bucket}/{input_zarr_path}'
     )
     #########################################################################
     # [2] extract gps and time coordinate from file-level Zarr store
     # reference: https://osoceanacoustics.github.io/echopype-examples/echopype_tour.html
-    # TODO: fix this for private bucket access
-    geo_json = geopandas.read_file(f's3://noaa-wcsd-zarr-pds/data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr/geo.json')
+    geo_json_s3_path = f's3://{input_zarr_bucket}/{input_zarr_path}/geo.json'
+    geo_json = geopandas.read_file(
+        filename=geo_json_s3_path,
+        storage_options={
+            "key": os.getenv('ACCESS_KEY_ID'),  # Optional values
+            "secret": os.getenv('SECRET_ACCESS_KEY'),
+        },
+    )
+    geo_json.id = pd.to_datetime(geo_json.id)
+    geo_json.id.astype('datetime64[ns]')
+    # Note: always use first timestamp from cruise-level, not from file-level
+    parsed_start_time = pd.to_datetime(df.iloc[0]['START_TIME']).tz_convert(None)
+    diffs = geo_json.dropna().id - parsed_start_time
+    microseconds_elapsed = diffs.values // 1000 # total elapsed microseconds
+    #parsed_start_time + pd.Timedelta(microseconds=microseconds_elapsed[-1].item(0))
+    # TODO: write microseconds_elapsed.tolist() as the timestamps
+    #
+    # geo_json.id = np.datetime64(geo_json.id)
     # TODO: get concave hull with https://pypi.org/project/alphashape/
     #########################################################################
     # [4] open cruise level zarr store for writing
@@ -257,45 +273,70 @@ def main(
 # https://github.com/oftfrfbf/watercolumn/blob/8b7ed605d22f446e1d1f3087971c31b83f1b5f4c/scripts/scan_watercolumn_bucket_by_size.py#L138
 total_width_traversed = 0
 index = df.index[df['ZARR_PATH'] == zarr_path][0]
+# Find offset from start index to insert new data
 ping_time_cumsum = np.insert( np.cumsum( df['NUM_PING_TIME_DROPNA'].to_numpy(dtype=int) ), obj=0, values=0 )
-start_ping_time_index = np.cumsum(df.iloc[:index]['NUM_PING_TIME_DROPNA']).values[-1]
+start_ping_time_index = ping_time_cumsum[index]
+end_ping_time_index = ping_time_cumsum[index+1] # - 1  # TODO: might not need to subtract one
 
-end_ping_time_index = int(start_ping_time_index + df.iloc[index]['NUM_PING_TIME_DROPNA'])
+# cruise level values
+width = cruise_zarr.time.shape[0] # ds_temp.Sv.shape[1]
+height = cruise_zarr.depth.shape[0] # ds_temp.Sv.shape[0]
+channels = cruise_zarr.channel.shape[0]
 
-width = ds_temp.Sv.ping_time.shape[0] # ds_temp.Sv.shape[1]
-height = ds_temp.Sv.range_sample.shape[0] # ds_temp.Sv.shape[0]
-channels = ds_temp.Sv.channel.shape[0]
-
-start_index = total_width_traversed  # start_index
-end_index = total_width_traversed + width  # end_index
+# start_index = total_width_traversed  # start_index
+# end_index = total_width_traversed + width  # end_index
 print(
-    f"width: {width},"
-    f"height: {height},"
+    f"total width: {width},"
+    f"total height: {height},"
     f"total_width_traversed: {total_width_traversed},"
-    f"s: {start_index}, e: {end_index}"
+    f"s: {start_ping_time_index}, e: {end_ping_time_index}"
 )
 
-
 #########################################################################
-# [5] write subset of time to the larger zarr store
+# [5] open cruise level zarr for writing
 # https://github.com/oftfrfbf/watercolumn/blob/master/scripts/test_overwrite_s3.py
 s3 = s3fs.S3FileSystem(
     key=os.getenv('ACCESS_KEY_ID'),  # optional parameter
     secret=os.getenv('SECRET_ACCESS_KEY'),
 )
-store = s3fs.S3Map(root=f's3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr', s3=s3, check=True)
+# TODO: note the "level_2" path
+store = s3fs.S3Map(root=f's3://{input_zarr_bucket}/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr', s3=s3, check=True)
 import zarr
 z = zarr.open(store=store, mode="r+") # 'r+' means read/write (store must already exist)
+z = zarr.open(store='test.zarr', mode='r+')
 #z.latitude[1] = 1.1
 #z.latitude[3] = 3.3
 ### above works ###
-
+# len(z.time[start_ping_time_index:end_ping_time_index]) =
 
 #########################################################################
-# [6] write subset of latitude to the larger zarr store
+# [6] write subset of ping_time to the larger zarr store
+# TODO: does this need to be epoch seconds? Check if zarrJS can read a pandas datetime64 output...
+#z.time[start_ping_time_index:end_ping_time_index] = geo_json.dropna().id.values
+z.time[start_ping_time_index:end_ping_time_index] = microseconds_elapsed.tolist()
+#z.time[0] = geo_json.dropna().id.values[0]
+s3_url_temp = "s3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr"
+s3 = s3fs.S3FileSystem(anon=True)
+store_temp = s3fs.S3Map(root=s3_url_temp, s3=s3, check=False)
+z_temp = xr.open_zarr(store=store_temp, consolidated=True)
+
+### test w/ existing
+"""
+# reads existing pds buckets
+s3_url_temp = "s3://echofish-dev-master-118234403147-echofish-zarr-store/GU1002_resample.zarr"
+s3 = s3fs.S3FileSystem(anon=True)
+store_temp = s3fs.S3Map(root=s3_url_temp, s3=s3, check=False)
+z_temp = xr.open_zarr(store=store_temp, consolidated=True)
+
+z_temp2 = zarr.open(store=store_temp, mode="r")
+"""
 
 #########################################################################
 # [7] write subset of longitude to the larger zarr store
+
+#########################################################################
+# [7b] write subset of latitude
+geo_json.latitude.dropna()
 
 #########################################################################
 # [8] write subset of _ to the larger zarr store

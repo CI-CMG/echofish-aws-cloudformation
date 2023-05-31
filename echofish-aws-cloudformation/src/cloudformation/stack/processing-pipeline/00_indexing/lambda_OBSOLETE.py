@@ -1,10 +1,31 @@
 #!/usr/bin/env python
 
+
+
+
+
+
+#
+#
+# NOTE: THIS PROJECT IS OBSOLETE, LOOK FOR "echofish-aws-indexing-lambda" for new updates
+#
+#
+
+
+
+
+
+
+
+
+
+
+
 """
 Bucket: https://ncei-wcsd-archive.s3.amazonaws.com/index.html
-Duration 578579.80 ms --> 9.6 minutes
+Estimated Duration 578579.80 ms --> 9.6 minutes
 Max Memory Used: 3345 MB
-Memory: 5000 MB, Storage: 1000 MB, Timeout 15 Minutes
+Lambda Memory: 5000 MB, Storage: 1000 MB, Timeout 15 Minutes
 Note: Requires Layer:
     AWSSDKPandas-Python39-Arm64, version 4, python3.9, arm64, arn:aws:lambda:us-east-1:336392948345:layer:AWSSDKPandas-Python39-Arm64:4
 
