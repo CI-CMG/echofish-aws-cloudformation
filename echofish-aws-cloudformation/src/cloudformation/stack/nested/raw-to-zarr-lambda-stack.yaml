@@ -15,6 +15,8 @@ Parameters:
     Type: Number
   Timeout:
     Type: Number
+  RawToZarrLambdaQueueArn:
+    Type: String
 
 Conditions:
   HasPermissionsBoundary:
@@ -53,6 +55,17 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
+        - PolicyName: SQS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Ref RawToZarrLambdaQueueArn
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
 
 
   Lambda:
@@ -65,12 +78,18 @@ Resources:
       Timeout: !Ref Timeout
       Role: !GetAtt LambdaRole.Arn
 
-
+  Trigger:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn: !Ref RawToZarrLambdaQueueArn
+      FunctionName: !Ref Lambda
 
   EC2LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/ec2/${AWS::StackName}/raw-to-zarr-lambda
+      LogGroupName: !Sub /aws/lambda/${Lambda}
       RetentionInDays: !Ref LogRetentionInDays
 
 

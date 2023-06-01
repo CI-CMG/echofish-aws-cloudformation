@@ -8,15 +8,8 @@ Parameters:
 
 Resources:
 
-  IndexLambdaTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-trigger-index
+
+  ##### Queues #####
 
   IndexLambdaQueue:
     Type: AWS::SQS::Queue
@@ -32,6 +25,71 @@ Resources:
 #      RedrivePolicy:
 #        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
 #        maxReceiveCount: !Ref MessageMaxReceiveCount
+
+  RawToZarrLambdaQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-raw-to-zarr
+  #      RedrivePolicy:
+  #        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+  #        maxReceiveCount: !Ref MessageMaxReceiveCount
+
+  ResampleAndWriteToZarrStoreLambdaQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-resample-zarr
+  #      RedrivePolicy:
+  #        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+  #        maxReceiveCount: !Ref MessageMaxReceiveCount
+
+
+  CreateEmptyZarrStoreLambdaQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-zarr-init
+  #      RedrivePolicy:
+  #        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
+  #        maxReceiveCount: !Ref MessageMaxReceiveCount
+
+
+  ##### Queues #####
+  ##### Topics #####
+
+  IndexLambdaTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-trigger-index
+
+
+  ##### Topics #####
+  ##### Wiring Topics To Queues #####
+
 
   IndexLambdaTopicToIndexLambdaQueue:
     Type: AWS::SNS::Subscription
@@ -61,11 +119,20 @@ Resources:
               ArnEquals:
                 aws:SourceArn: !Ref IndexLambdaTopic
 
+
+  ##### Wiring Topics To Queues #####
+
 Outputs:
   IndexLambdaTopicArn:
     Value: !Ref IndexLambdaTopic
   IndexLambdaQueueArn:
     Value: !GetAtt IndexLambdaQueue.Arn
+  RawToZarrLambdaQueueArn:
+    Value: !GetAtt RawToZarrLambdaQueue.Arn
+  ResampleAndWriteToZarrStoreLambdaQueueArn:
+    Value: !GetAtt ResampleAndWriteToZarrStoreLambdaQueue.Arn
+  CreateEmptyZarrStoreLambdaQueueArn:
+    Value: !GetAtt CreateEmptyZarrStoreLambdaQueue.Arn
 
 
 

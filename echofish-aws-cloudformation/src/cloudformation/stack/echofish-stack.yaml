@@ -25,7 +25,7 @@ Parameters:
 
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230531174947
+    Default: 1.0.0.dev20230601153606
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -158,6 +158,10 @@ Resources:
         ImageTag: !Ref RawToZarrLambdaImageTag
         MemorySize: !Ref RawToZarrLambdaMemorySize
         Timeout: !Ref RawToZarrLambdaTimeout
+        RawToZarrLambdaQueueArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.RawToZarrLambdaQueueArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-lambda-stack.yaml
