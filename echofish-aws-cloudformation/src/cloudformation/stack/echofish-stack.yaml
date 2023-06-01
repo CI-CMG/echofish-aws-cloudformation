@@ -25,17 +25,17 @@ Parameters:
 
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230531161853
+    Default: 1.0.0.dev20230531174947
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
     MaxValue: 10240
-    Default: 2048
+    Default: 4096
   IndexingLambdaTimeout:
     Type: Number
     MinValue: 1
     MaxValue: 900
-    Default: 600
+    Default: 900
 
   RawToZarrLambdaImageTag:
     Type: String
@@ -132,6 +132,10 @@ Resources:
           Fn::GetAtt:
             - DynamoDbStack
             - Outputs.IndexTableName
+        IndexTableArn:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.IndexTableArn
         RawSourceBucket: !Ref RawSourceBucket
         CalibrationBucket: !Ref CalibrationBucket
         CalibrationFileKey: !Ref CalibrationFileKey

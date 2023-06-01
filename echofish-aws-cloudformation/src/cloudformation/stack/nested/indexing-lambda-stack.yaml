@@ -17,6 +17,8 @@ Parameters:
     Type: Number
   IndexTableName:
     Type: String
+  IndexTableArn:
+    Type: String
   RawSourceBucket:
     Type: String
   CalibrationBucket:
@@ -74,6 +76,40 @@ Resources:
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
                   - sqs:ChangeMessageVisibility
+        - PolicyName: S3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${RawSourceBucket}/*
+                Action:
+                  - s3:GetObject
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${RawSourceBucket}
+                Action:
+                  - s3:ListBucket
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${CalibrationBucket}/*
+                Action:
+                  - s3:GetObject
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${CalibrationBucket}
+                Action:
+                  - s3:ListBucket
+        - PolicyName: DynamoDB
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Ref IndexTableArn
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:DeleteItem
 
 
   Lambda:
