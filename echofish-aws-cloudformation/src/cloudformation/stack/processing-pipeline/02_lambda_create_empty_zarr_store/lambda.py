@@ -256,11 +256,14 @@ def create_zarr_store(
     # width=10; height=10; channel=['a', 'b', 'c']
     ###
     compressor = Blosc(cname="zstd", clevel=5, shuffle=Blosc.BITSHUFFLE)
-    store = zarr.DirectoryStore(path=store_name)  # TODO: write directly to s3?
-    root = zarr.group(store=store, path="/", overwrite=True)
+    # Note: normalize_keys sets keys to lower case characters
+    store = zarr.DirectoryStore(path=store_name, normalize_keys=True)  # TODO: write directly to s3?
+    root = zarr.group(store=store, overwrite=True) # path="/",
     args = {'compressor': compressor, 'fill_value': np.nan}
     #####################################################################
     # Coordinate: Time -- no missing values will be included
+    # https://zarr.readthedocs.io/en/stable/spec/v2.html#data-type-encoding
+    """
     root.create_dataset(name="/time", shape=width, chunks=TILE_SIZE, dtype='float64', **args)
     root.time.attrs['_ARRAY_DIMENSIONS'] = ['time']
     # Use the first cruise-level file START_TIME to denote the base cftime units
@@ -269,9 +272,17 @@ def create_zarr_store(
     units = f"microseconds since {parsed_start_time.date().isoformat()} {parsed_start_time.time().isoformat()}"
     # Note: format should look like 'microseconds since 2007-07-11 18:20:32.656000'
     root.time.attrs['units'] = units
+    """
+    # time = root.create_group(name="time")
+    root.create_dataset(name="time", shape=width, chunks=TILE_SIZE, dtype='float64', compressor=compressor)
+    root.time.attrs['_ARRAY_DIMENSIONS'] = ['time']
+    # Note: format should look like 'microseconds since 2007-07-11 18:20:32.656000'
+    # zzz = zarr.open('https://echofish-dev-master-118234403147-echofish-zarr-store.s3.us-west-2.amazonaws.com/GU1002_resample.zarr')
+    # zzz.time[0] = 1274979445.423
+    root.time[:] = np.nan
     #####################################################################
     # Coordinate: Depth -- float16 == 2 significant digits
-    root.create_dataset(name="/depth", shape=height, chunks=TILE_SIZE, dtype='float32', **args)
+    root.create_dataset(name="depth", shape=height, chunks=TILE_SIZE, dtype='float32', compressor=compressor) # , overwrite=True
     root.depth.attrs['_ARRAY_DIMENSIONS'] = ['depth']
     root.depth[:] = np.round(
         np.linspace(start=0, stop=min_echo_range * height, num=height),
@@ -279,34 +290,37 @@ def create_zarr_store(
     )  # Note: "depth" starts at zero [inclusive]
     #####################################################################
     # Coordinates: Channel
-    root.create_dataset(name="/channel", shape=len(channel), chunks=1, dtype='str', **args)
-    root.channel.attrs['_ARRAY_DIMENSIONS'] = ['channel']
-    root.channel[:] = channel
+    # TODO: change str to something else...
+    # root.create_dataset(name="/channel", shape=len(channel), chunks=1, dtype='str', compressor=compressor)
+    # root.channel.attrs['_ARRAY_DIMENSIONS'] = ['channel']
+    # root.channel[:] = channel
     #####################################################################
     # Latitude -- float32 == 5 significant digits
-    root.create_dataset(name="/latitude", shape=width, chunks=TILE_SIZE, dtype='float32', **args)
+    root.create_dataset(name="latitude", shape=width, chunks=TILE_SIZE, dtype='float32', compressor=compressor)
     root.latitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
     root.latitude[:] = np.nan
     #####################################################################
     # Longitude
-    root.create_dataset(name="/longitude", shape=width, chunks=TILE_SIZE, dtype='float32', **args)
+    root.create_dataset(name="longitude", shape=width, chunks=TILE_SIZE, dtype='float32', compressor=compressor)
     root.longitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
     root.longitude[:] = np.nan
     #####################################################################
     # Frequency
-    root.create_dataset(name="/frequency", shape=len(frequency), chunks=1, dtype='float32', **args)
-    root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['channel']
+    root.create_dataset(name="frequency", shape=len(frequency), chunks=1, dtype='float32', compressor=compressor)
+    # root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['channel']
+    root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['frequency']  # TODO: change back to channel with string val
     root.frequency[:] = frequency
     #####################################################################
     # Data # TODO: Note change from 'data' to 'Sv'
     root.create_dataset(
-        name="/Sv",
-        shape=(height, width, len(channel)),
+        name="sv",
+        shape=(height, width, len(frequency)),
         chunks=(TILE_SIZE, TILE_SIZE, 1),
-        dtype='float16',
-        **args
+        dtype='float32',  # TODO: try to experiment with 'float16'
+        compressor=compressor,
+        fill_value=np.nan
     )
-    root.Sv.attrs['_ARRAY_DIMENSIONS'] = ['depth', 'time', 'channel']
+    root.Sv.attrs['_ARRAY_DIMENSIONS'] = ['depth', 'time', 'frequency']
     zarr.consolidate_metadata(store)
     #####################################################################
     #import xarray as xr
@@ -362,8 +376,8 @@ def get_table_as_dataframe(
         raise err
     df = pd.DataFrame(data)
     assert(
-        np.any(df['PIPELINE_STATUS'] == PIPELINE_STATUS.PROCESSING.value)
-    ), "None of the status fields should still be processing."
+        not np.any(df['PIPELINE_STATUS'] == PIPELINE_STATUS.PROCESSING.value)
+    ), f"None of the PIPELINE_STATUS fields should still be {PIPELINE_STATUS.PROCESSING.value}."
     df_success = df[df['PIPELINE_STATUS'] == PIPELINE_STATUS.SUCCESS.value]
     if df_success.shape[0] == 0:
         raise

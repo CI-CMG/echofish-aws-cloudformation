@@ -89,7 +89,7 @@ def get_table_as_dataframe(
         raise err
     df = pd.DataFrame(data)
     assert( #
-        np.all(df['PIPELINE_STATUS'] != PIPELINE_STATUS.PROCESSING.value)
+        np.all(df['PIPELINE_STATUS'] == PIPELINE_STATUS.SUCCESS.value)
     ), "None of the status fields should still be processing."
     df_success = df[df['PIPELINE_STATUS'] == PIPELINE_STATUS.SUCCESS.value]
     if df_success.shape[0] == 0:
@@ -151,7 +151,7 @@ def main(
     ship_name: str = 'Henry_B._Bigelow',
     cruise_name: str = 'HB0707',
     sensor_name: str = 'EK60',
-    input_zarr_path: str = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T210709.zarr',
+    input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T210709.zarr',
     output_zarr_bucket: str = 'noaa-wcsd-zarr-pds',
     output_zarr_path: str = 'level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr',
     zarr_synchronizer: Union[str, None] = None,
@@ -200,7 +200,7 @@ def main(
     )
     # zarr_path = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
     # zarr_path = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T210709.zarr'
-    zarr_path = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr'
+    zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
     #
     index = df.index[df['ZARR_PATH'] == zarr_path][0]; print(index)
     file_info = df.iloc[index].to_dict()
@@ -225,9 +225,11 @@ def main(
     input_zarr_path = file_info['ZARR_PATH']
     #
     #df.iloc[:index]['NUM_PING_TIME_DROPNA']
-    # TODO: Fix this to accommodate ?
-    start_ping_time_index = np.cumsum(df.iloc[:index]['NUM_PING_TIME_DROPNA']).values[-1]
-    end_ping_time_index = int(start_ping_time_index + df.iloc[index]['NUM_PING_TIME_DROPNA'])
+    # TODO: Delete this...
+    # start_ping_time_index = 0
+    # if len( np.cumsum(df.iloc[:index]['NUM_PING_TIME_DROPNA']).values ) > 0:
+    #     start_ping_time_index = start_ping_time_index + np.cumsum(df.iloc[:index]['NUM_PING_TIME_DROPNA']).values[-1]
+    # end_ping_time_index = int(start_ping_time_index + df.iloc[index]['NUM_PING_TIME_DROPNA'])
     #################################################################
     #################################################################
     # [1] read file-level Zarr store using xarray
@@ -254,12 +256,10 @@ def main(
     #parsed_start_time + pd.Timedelta(microseconds=microseconds_elapsed[-1].item(0))
     # TODO: write microseconds_elapsed.tolist() as the timestamps
     #
-    # geo_json.id = np.datetime64(geo_json.id)
     # TODO: get concave hull with https://pypi.org/project/alphashape/
     #########################################################################
     # [4] open cruise level zarr store for writing
     # TODO: need to open with Zarr library, not xarray!
-    import s3fs; import os
     s3_fs = s3fs.S3FileSystem(
         key=os.getenv('ACCESS_KEY_ID'),  # TODO: treat as optional parameter
         secret=os.getenv('SECRET_ACCESS_KEY'),
@@ -277,12 +277,12 @@ index = df.index[df['ZARR_PATH'] == zarr_path][0]
 ping_time_cumsum = np.insert( np.cumsum( df['NUM_PING_TIME_DROPNA'].to_numpy(dtype=int) ), obj=0, values=0 )
 start_ping_time_index = ping_time_cumsum[index]
 end_ping_time_index = ping_time_cumsum[index+1] # - 1  # TODO: might not need to subtract one
-
+#
 # cruise level values
 width = cruise_zarr.time.shape[0] # ds_temp.Sv.shape[1]
 height = cruise_zarr.depth.shape[0] # ds_temp.Sv.shape[0]
 channels = cruise_zarr.channel.shape[0]
-
+#
 # start_index = total_width_traversed  # start_index
 # end_index = total_width_traversed + width  # end_index
 print(
@@ -291,7 +291,7 @@ print(
     f"total_width_traversed: {total_width_traversed},"
     f"s: {start_ping_time_index}, e: {end_ping_time_index}"
 )
-
+#
 #########################################################################
 # [5] open cruise level zarr for writing
 # https://github.com/oftfrfbf/watercolumn/blob/master/scripts/test_overwrite_s3.py
@@ -300,6 +300,7 @@ s3 = s3fs.S3FileSystem(
     secret=os.getenv('SECRET_ACCESS_KEY'),
 )
 # TODO: note the "level_2" path
+# zarr_prefix = os.path.join("level_1", ship_name, cruise_name, sensor_name)
 store = s3fs.S3Map(root=f's3://{input_zarr_bucket}/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr', s3=s3, check=True)
 import zarr
 z = zarr.open(store=store, mode="r+")  # 'r+' means read/write (store must already exist)
@@ -307,18 +308,19 @@ z = zarr.open(store=store, mode="r+")  # 'r+' means read/write (store must alrea
 #z.latitude[3] = 3.3
 ### above works ###
 # len(z.time[start_ping_time_index:end_ping_time_index]) =
-
 #########################################################################
 # [6] write subset of ping_time to the larger zarr store
 # TODO: does this need to be epoch seconds? Check if zarrJS can read a pandas datetime64 output...
 #z.time[start_ping_time_index:end_ping_time_index] = geo_json.dropna().id.values
+assert(
+    len(microseconds_elapsed.tolist()) == len(z.time[start_ping_time_index:end_ping_time_index])
+), "Number of the timestamps isnt equivalent to indices given."
 z.time[start_ping_time_index:end_ping_time_index] = microseconds_elapsed.tolist()
 #z.time[0] = geo_json.dropna().id.values[0]
-s3_url_temp = "s3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr"
-s3 = s3fs.S3FileSystem(anon=True)
-store_temp = s3fs.S3Map(root=s3_url_temp, s3=s3, check=False)
-z_temp = xr.open_zarr(store=store_temp, consolidated=True)
-
+# s3_url_temp = "s3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr"
+# s3 = s3fs.S3FileSystem(anon=True) # TODO: get rid of anonymous
+# store_temp = s3fs.S3Map(root=s3_url_temp, s3=s3, check=False)
+# z_temp = xr.open_zarr(store=store_temp, consolidated=True)
 ### test w/ existing
 """
 # reads existing pds buckets
@@ -332,10 +334,11 @@ z_temp2 = zarr.open(store=store_temp, mode="r")
 
 #########################################################################
 # [7] write subset of longitude to the larger zarr store
+z.longitude[start_ping_time_index:end_ping_time_index] = geo_json.dropna().longitude.tolist()
 
 #########################################################################
 # [7b] write subset of latitude
-geo_json.latitude.dropna()
+z.latitude[start_ping_time_index:end_ping_time_index] = geo_json.dropna().latitude.tolist()
 
 #########################################################################
 # [8] write subset of _ to the larger zarr store

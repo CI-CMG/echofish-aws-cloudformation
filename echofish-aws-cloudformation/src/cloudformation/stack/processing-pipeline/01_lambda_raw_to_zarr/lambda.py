@@ -550,7 +550,6 @@ def main(
         cruise_name: str='HB0707',
         sensor_name: str='EK60',
         input_bucket: str="noaa-wcsd-pds",
-        #output_bucket: str="noaa-wcsd-pds-index",  # "noaa-wcsd-zarr-pds",
         output_bucket: str="noaa-wcsd-zarr-pds",
         input_file: str="D20070711-T182032.raw",  # TODO: integrate this...
 ) -> None:
@@ -608,10 +607,7 @@ def main(
         row_split = raw_file.split(os.sep)
         # { ship: 'Okeanos_Explorer', cruise_name: 'EX1608', sensor_name: 'EK60', file_name: 'D20070711-T182032.raw' }
         ship_name, cruise_name, sensor_name, file_name = row_split[-4:]
-        #
-        # zarr_prefix = os.path.join("data", "raw", ship_name, cruise_name, sensor_name)
         zarr_prefix = os.path.join("level_1", ship_name, cruise_name, sensor_name)
-        #
         store_name = f"{os.path.splitext(file_name)[0]}.zarr"
         #
         processing_status = get_processing_status(
