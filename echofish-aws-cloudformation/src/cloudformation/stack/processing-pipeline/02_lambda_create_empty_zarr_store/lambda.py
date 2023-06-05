@@ -276,18 +276,29 @@ def create_zarr_store(
     # time = root.create_group(name="time")
     root.create_dataset(name="time", shape=width, chunks=TILE_SIZE, dtype='float64', compressor=compressor)
     root.time.attrs['_ARRAY_DIMENSIONS'] = ['time']
-    # Note: format should look like 'microseconds since 2007-07-11 18:20:32.656000'
+    root.time.attrs['calendar'] = 'proleptic_gregorian'
+    root.time.attrs['units'] = f"seconds since 1970-01-01 00:00:00.000000"
     # zzz = zarr.open('https://echofish-dev-master-118234403147-echofish-zarr-store.s3.us-west-2.amazonaws.com/GU1002_resample.zarr')
     # zzz.time[0] = 1274979445.423
     root.time[:] = np.nan
     #####################################################################
     # Coordinate: Depth -- float16 == 2 significant digits
     root.create_dataset(name="depth", shape=height, chunks=TILE_SIZE, dtype='float32', compressor=compressor) # , overwrite=True
+    # TODO: PROBLEM, depth at zero is nan???
     root.depth.attrs['_ARRAY_DIMENSIONS'] = ['depth']
+    # root.depth[:] = np.round(
+    #     np.linspace(start=0, stop=min_echo_range * height, num=height),
+    #     decimals=2
+    # )
+    # Note: "depth" starts at zero [inclusive]
     root.depth[:] = np.round(
-        np.linspace(start=0, stop=min_echo_range * height, num=height),
+        np.linspace(
+            start=0,
+            stop=min_echo_range * height,
+            num=height
+        ),
         decimals=2
-    )  # Note: "depth" starts at zero [inclusive]
+    )
     #####################################################################
     # Coordinates: Channel
     # TODO: change str to something else...
@@ -308,12 +319,12 @@ def create_zarr_store(
     # Frequency
     root.create_dataset(name="frequency", shape=len(frequency), chunks=1, dtype='float32', compressor=compressor)
     # root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['channel']
-    root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['frequency']  # TODO: change back to channel with string val
+    root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['frequency']  # TODO: change back to channel with string values?
     root.frequency[:] = frequency
     #####################################################################
     # Data # TODO: Note change from 'data' to 'Sv'
     root.create_dataset(
-        name="sv",
+        name="Sv",
         shape=(height, width, len(frequency)),
         chunks=(TILE_SIZE, TILE_SIZE, 1),
         dtype='float32',  # TODO: try to experiment with 'float16'
@@ -554,26 +565,4 @@ curl -XPOST "http://localhost:8080/2015-03-31/functions/function/invocations" -d
 AWS_LAMBDA_FUNCTION_VERSION
 AWS_LAMBDA_FUNCTION_NAME
 AWS_LAMBDA_FUNCTION_MEMORY_SIZE
-
-
-
-
-def get_secret(secret_name: str) -> dict:
-    # secret_name = "NOAA_WCSD_ZARR_PDS_BUCKET"  # TODO: parameterize
-    secretsmanager_client = session.client(service_name='secretsmanager')
-    try:
-        get_secret_value_response = secretsmanager_client.get_secret_value(SecretId=secret_name)
-        return json.loads(get_secret_value_response['SecretString'])
-    except ClientError as e:
-        if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            print("The requested secret " + secret_name + " was not found")
-        elif e.response['Error']['Code'] == 'InvalidRequestException':
-            print("The request was invalid due to:", e)
-        elif e.response['Error']['Code'] == 'InvalidParameterException':
-            print("The request had invalid params:", e)
-        elif e.response['Error']['Code'] == 'DecryptionFailure':
-            print("The requested secret can't be decrypted using the provided KMS key:", e)
-        elif e.response['Error']['Code'] == 'InternalServiceError':
-            print("An error occurred on service side:", e)
-
 """

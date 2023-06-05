@@ -277,6 +277,7 @@ def get_s3_files(
         else:
             for i in children:
                 # Note any files with predicate 'NOISE' are to be ignored, see: "Bell_M._Shimada/SH1507"
+                # cruise for more details.
                 if i['Key'].endswith(file_suffix) and not os.path.basename(i['Key']).startswith(('NOISE')):
                     raw_files.append(i['Key'])
             return raw_files
@@ -545,6 +546,7 @@ def write_geojson_to_file(
 
 
 def main(
+        context: dict,
         prefix: str='rudy',
         ship_name: str='Henry_B._Bigelow',
         cruise_name: str='HB0707',
@@ -561,6 +563,8 @@ def main(
 
     Parameters
     ----------
+    context : dict
+        The given AWS execution context.
     prefix : str
         The desired prefix for this specific deployment of the template.
     ship_name : str
@@ -741,12 +745,16 @@ def main(
         )
         #
         print(f'Done processing {raw_file}')
+        # TODO: write the remaining time to the DynamoDB table so we
+        # can optimize for the best processing power
+        print(context.get_remaining_time_in_millis())
         #################################################################
 
 
 #########################################################################
 def lambda_handler(event: dict, context: dict) -> dict:
     main(
+        context=context,
         prefix='rudy',
         ship_name='Henry_B._Bigelow',
         cruise_name='HB0707',
