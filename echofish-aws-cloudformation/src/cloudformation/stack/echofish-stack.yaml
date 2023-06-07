@@ -5,6 +5,9 @@ Parameters:
   RawSourceBucket:
     Type: String
     Default: noaa-wcsd-pds
+  # noaa-wcsd-zarr-pds
+  OutputBucket:
+    Type: String
   CalibrationBucket:
     Type: String
     Default: noaa-wcsd-pds-index
@@ -158,6 +161,18 @@ Resources:
         ImageTag: !Ref RawToZarrLambdaImageTag
         MemorySize: !Ref RawToZarrLambdaMemorySize
         Timeout: !Ref RawToZarrLambdaTimeout
+        FileInfoTableArn:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableArn
+        FileInfoTableName:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableName
+        RawSourceBucket:
+          Type: !Ref RawSourceBucket
+        OutputBucket:
+          Type: !Ref OutputBucket
         RawToZarrLambdaQueueArn:
           Fn::GetAtt:
             - MessagingStack
