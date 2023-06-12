@@ -218,9 +218,9 @@ def create_zarr_store(
         width: int,
         height: int,
         min_echo_range: float,
-        channel: list,
+        # channel: list,
         frequency: list,
-        start_time: str,
+        # start_time: str,
 ) -> None:
     """Creates a new and empty Zarr store in a s3 bucket.
 
@@ -257,48 +257,87 @@ def create_zarr_store(
     ###
     compressor = Blosc(cname="zstd", clevel=5, shuffle=Blosc.BITSHUFFLE)
     # Note: normalize_keys sets keys to lower case characters
-    store = zarr.DirectoryStore(path=store_name, normalize_keys=True)  # TODO: write directly to s3?
-    root = zarr.group(store=store, overwrite=True) # path="/",
-    args = {'compressor': compressor, 'fill_value': np.nan}
+    store = zarr.DirectoryStore(path=store_name, normalize_keys=False)  # TODO: write directly to s3?
+    root = zarr.group(store=store, overwrite=True, cache_attrs=True) # path="/",
     #####################################################################
     # Coordinate: Time -- no missing values will be included
     # https://zarr.readthedocs.io/en/stable/spec/v2.html#data-type-encoding
-    """
-    root.create_dataset(name="/time", shape=width, chunks=TILE_SIZE, dtype='float64', **args)
-    root.time.attrs['_ARRAY_DIMENSIONS'] = ['time']
-    # Use the first cruise-level file START_TIME to denote the base cftime units
-    root.time.attrs['calendar'] = 'proleptic_gregorian'
-    parsed_start_time = pd.to_datetime(start_time).tz_convert(None)
-    units = f"microseconds since {parsed_start_time.date().isoformat()} {parsed_start_time.time().isoformat()}"
-    # Note: format should look like 'microseconds since 2007-07-11 18:20:32.656000'
-    root.time.attrs['units'] = units
-    """
     # time = root.create_group(name="time")
-    root.create_dataset(name="time", shape=width, chunks=TILE_SIZE, dtype='float64', compressor=compressor)
+    root.create_dataset(
+        name="time",
+        data=np.repeat(0., width),
+        shape=width,
+        chunks=TILE_SIZE,
+        dtype=np.dtype('float64'),
+        compressor=compressor,
+        fill_value=0.,
+        overwrite=True
+    )
     root.time.attrs['_ARRAY_DIMENSIONS'] = ['time']
     root.time.attrs['calendar'] = 'proleptic_gregorian'
-    root.time.attrs['units'] = f"seconds since 1970-01-01 00:00:00.000000"
+    root.time.attrs['units'] = "seconds since 1970-01-01 00:00:00"
+    root.time.attrs['long_name'] = "Timestamp of each ping"
+    root.time.attrs['standard_name'] = "time"
     # zzz = zarr.open('https://echofish-dev-master-118234403147-echofish-zarr-store.s3.us-west-2.amazonaws.com/GU1002_resample.zarr')
     # zzz.time[0] = 1274979445.423
-    root.time[:] = np.nan
+    # Initialize all to origin time, will be overwritten late
     #####################################################################
     # Coordinate: Depth -- float16 == 2 significant digits
-    root.create_dataset(name="depth", shape=height, chunks=TILE_SIZE, dtype='float32', compressor=compressor) # , overwrite=True
-    # TODO: PROBLEM, depth at zero is nan???
-    root.depth.attrs['_ARRAY_DIMENSIONS'] = ['depth']
-    # root.depth[:] = np.round(
-    #     np.linspace(start=0, stop=min_echo_range * height, num=height),
-    #     decimals=2
-    # )
-    # Note: "depth" starts at zero [inclusive]
-    root.depth[:] = np.round(
+    initial_depth_data = np.round(
         np.linspace(
             start=0,
             stop=min_echo_range * height,
             num=height
         ),
         decimals=2
+    ) + 0.01
+    root.create_dataset(
+        name="depth",
+        data=initial_depth_data,
+        shape=height,
+        chunks=TILE_SIZE,
+        dtype=np.dtype('float64'),
+        compressor=compressor,
+        fill_value=0.,
+        overwrite=True
     )
+    # TODO: PROBLEM, depth at zero is nan???
+    root.depth.attrs['_ARRAY_DIMENSIONS'] = ['depth']
+    root.depth.attrs['long_name'] = 'Depth below surface'
+    root.depth.attrs['units'] = 'm'
+    # Note: "depth" starts at zero [inclusive]
+    #####################################################################
+    # Latitude -- float32 == 5 significant digits
+    root.create_dataset(
+        name="latitude",
+        data=np.repeat(0., width),
+        shape=width,
+        chunks=TILE_SIZE,
+        dtype=np.dtype('float32'),
+        compressor=compressor,
+        fill_value=0.,
+        overwrite=True
+    )
+    root.latitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
+    root.latitude.attrs['long_name'] = 'Latitude'
+    root.latitude.attrs['units'] = 'degrees_north'
+    # root.latitude[:] = np.nan
+    #####################################################################
+    # Longitude
+    root.create_dataset(
+        name="longitude",
+        data=np.repeat(0., width),
+        shape=width,
+        chunks=TILE_SIZE,
+        dtype=np.dtype('float32'),
+        compressor=compressor,
+        fill_value=0.,
+        overwrite=True
+    )
+    root.longitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
+    root.longitude.attrs['long_name'] = 'Longitude'
+    root.longitude.attrs['units'] = 'degrees_east'
+    # root.longitude[:] = np.nan
     #####################################################################
     # Coordinates: Channel
     # TODO: change str to something else...
@@ -306,33 +345,37 @@ def create_zarr_store(
     # root.channel.attrs['_ARRAY_DIMENSIONS'] = ['channel']
     # root.channel[:] = channel
     #####################################################################
-    # Latitude -- float32 == 5 significant digits
-    root.create_dataset(name="latitude", shape=width, chunks=TILE_SIZE, dtype='float32', compressor=compressor)
-    root.latitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
-    root.latitude[:] = np.nan
-    #####################################################################
-    # Longitude
-    root.create_dataset(name="longitude", shape=width, chunks=TILE_SIZE, dtype='float32', compressor=compressor)
-    root.longitude.attrs['_ARRAY_DIMENSIONS'] = ['time']
-    root.longitude[:] = np.nan
-    #####################################################################
     # Frequency
-    root.create_dataset(name="frequency", shape=len(frequency), chunks=1, dtype='float32', compressor=compressor)
+    root.create_dataset(
+        name="frequency",
+        data=frequency,
+        shape=len(frequency),
+        chunks=1,
+        dtype=np.dtype('float32'),
+        compressor=compressor,
+        fill_value=0.,
+        overwrite=True
+    )
     # root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['channel']
     root.frequency.attrs['_ARRAY_DIMENSIONS'] = ['frequency']  # TODO: change back to channel with string values?
-    root.frequency[:] = frequency
+    root.frequency.attrs['long_name'] = 'Transducer frequency'
+    root.frequency.attrs['standard_name'] = 'sound_frequency'
+    root.frequency.attrs['units'] = 'Hz'
     #####################################################################
     # Data # TODO: Note change from 'data' to 'Sv'
     root.create_dataset(
         name="Sv",
         shape=(height, width, len(frequency)),
         chunks=(TILE_SIZE, TILE_SIZE, 1),
-        dtype='float32',  # TODO: try to experiment with 'float16'
+        dtype=np.dtype('float32'),  # TODO: try to experiment with 'float16'
         compressor=compressor,
-        fill_value=np.nan
+        fill_value=np.nan,
+        overwrite=True
     )
     root.Sv.attrs['_ARRAY_DIMENSIONS'] = ['depth', 'time', 'frequency']
-    zarr.consolidate_metadata(store)
+    root.Sv.attrs['long_name'] = 'Volume backscattering strength (Sv re 1 m-1)'
+    root.Sv.attrs['units'] = 'dB'
+    zarr.consolidate_metadata(store=store_name)
     #####################################################################
     #import xarray as xr
     #foo = xr.open_zarr(f'{cruise_name}.zarr')
@@ -423,7 +466,7 @@ def main(
         ship_name: str='Henry_B._Bigelow',
         cruise_name: str='HB0707',
         sensor_name: str='EK60',
-        output_bucket: str='noaa-wcsd-zarr-pds'
+        output_bucket: str='noaa-wcsd-zarr-pds',
 ) -> None:
     """This Lambda runs once per cruise. It gets data from DynamoDB to
     get stats on how to build an empty Zarr store at the cruise level.
@@ -487,10 +530,14 @@ def main(
         width=new_width,
         height=new_height,
         min_echo_range=cruise_min_echo_range,
-        channel=cruise_channels,
+        # channel=cruise_channels,
         frequency=cruise_frequencies,
-        start_time=df.iloc[0]['START_TIME']
+        # start_time=df.iloc[0]['START_TIME']
     )
+    xx = xr.open_zarr(store_name, consolidated=False)
+    xx
+    zz = zarr.open(store_name)
+    zz.depth.info
     #################################################################
     zarr_prefix = os.path.join("level_2", ship_name, cruise_name, sensor_name)
     #
@@ -506,7 +553,7 @@ def main(
     # Verify count of the files uploaded
     count = get_file_count(store_name=store_name)
     #
-    raw_zarr_files = get_s3_files(
+    raw_zarr_files = get_s3_files( # TODO: just need count
         bucket_name=output_bucket,
         sub_prefix=os.path.join(zarr_prefix, store_name),
         access_key_id=os.getenv('ACCESS_KEY_ID'),

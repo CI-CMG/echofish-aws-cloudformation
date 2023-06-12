@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import json
 import glob
 import shutil
 import echopype as ep
@@ -24,6 +25,8 @@ TEMPDIR = "/tmp"  # tempfile.gettempdir()
 
 
 # TODO: Add methods for updating errors as FAILURE in DynamoDB
+
+# TODO: will this work with SQS batch processing idempotency
 
 #####################################################################
 class PIPELINE_STATUS(Enum):
@@ -545,8 +548,17 @@ def write_geojson_to_file(
         outfile.write(data)
 
 
+# {
+# "prefix": "rudy",
+# "ship_name": "Henry_B._Bigelow",
+# "cruise_name": "HB0707",
+# "sensor_name": "EK60",
+# "input_bucket": "noaa-wcsd-pds",
+# "output_bucket": "noaa-wcsd-zarr-pds",
+# "input_file": "D20070711-T182032.raw"
+# }
+
 def main(
-        context: dict,
         prefix: str='rudy',
         ship_name: str='Henry_B._Bigelow',
         cruise_name: str='HB0707',
@@ -563,8 +575,6 @@ def main(
 
     Parameters
     ----------
-    context : dict
-        The given AWS execution context.
     prefix : str
         The desired prefix for this specific deployment of the template.
     ship_name : str
@@ -638,6 +648,7 @@ def main(
             input_bucket=input_bucket,
             raw_file=raw_file,
         )
+        os.listdir()
         #################################################################
         print(f'Opening raw: {file_name}')
         # TODO: "use_swap" creates file in the users home directory
@@ -652,7 +663,8 @@ def main(
         gps_data, lat, lon = get_gps_data(echodata=echodata)
         #################################################################
         zarr_path = os.path.join(zarr_prefix, store_name)
-        min_echo_range = float(np.nanmin(ds_Sv.echo_range.values[np.nonzero(ds_Sv.echo_range.values)]))
+        # min_echo_range = float(np.nanmin(ds_Sv.echo_range.values[np.nonzero(ds_Sv.echo_range.values)]))
+        min_echo_range = np.min(np.diff(ds_Sv.echo_range.values))  # TODO: change to min_depth_diff
         max_echo_range = float(np.nanmax(ds_Sv.echo_range))
         num_ping_time_dropna = lat[~np.isnan(lat)].shape[0]  # symmetric to lon
         start_time = np.datetime_as_string(ds_Sv.ping_time.values[0], unit='ms') + "Z"
@@ -686,7 +698,7 @@ def main(
                 file_name=file_name,
                 zarr_bucket=output_bucket,
                 zarr_path=zarr_path,
-                min_echo_range=min_echo_range,
+                min_echo_range=min_echo_range,  # TODO: change to diff
                 max_echo_range=max_echo_range,
                 num_ping_time_dropna=num_ping_time_dropna,
                 start_time=start_time,
@@ -747,14 +759,13 @@ def main(
         print(f'Done processing {raw_file}')
         # TODO: write the remaining time to the DynamoDB table so we
         # can optimize for the best processing power
-        print(context.get_remaining_time_in_millis())
         #################################################################
 
 
 #########################################################################
 def lambda_handler(event: dict, context: dict) -> dict:
+    message = json.loads(event['Records'][0]['body'])
     main(
-        context=context,
         prefix='rudy',
         ship_name='Henry_B._Bigelow',
         cruise_name='HB0707',

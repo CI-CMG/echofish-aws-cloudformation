@@ -3,23 +3,23 @@
 # https://github.com/oftfrfbf/watercolumn/blob/master/scripts/zarr_upsample.py
 
 import os
-import json
 import boto3
 # import logging
-import botocore
-import aiobotocore
 from typing import Union
 import s3fs
 import zarr
 from scipy import interpolate
 import geopandas
-from botocore.config import Config
 from botocore.exceptions import ClientError
-from boto3.s3.transfer import TransferConfig
 import numpy as np
 import xarray as xr
 import pandas as pd
 from enum import Enum
+
+# zarr.__version__ '2.14.2'
+# pd.__version__ '1.5.3'
+# np.__version__ '1.24.3'
+# xr.__version__ '2023.5.0'
 
 # TODO: Add logging
 # logging.basicConfig(level=logging.DEBUG)
@@ -38,7 +38,9 @@ SYNCHRONIZER = None # TODO: this will need to be shared between parallel lambdas
 
 #####################################################################
 class PIPELINE_STATUS(Enum):
-    '''Keywords used to denote processing status in DynamoDB'''
+    """
+    Keywords used to denote processing status in DynamoDB
+    """
     PROCESSING = 'PROCESSING'
     SUCCESS = 'SUCCESS'
     FAILURE = 'FAILURE'
@@ -100,26 +102,45 @@ def get_table_as_dataframe(
 
 
 #####################################################################
-#### BELOW IS CONSOLIDATED FROM PREVIOUS PROJECT ####
-# def print_diagnostics(context):
-#     # print(f"TEMPDIR: {TEMPDIR}")
-#     print(f"Lambda function ARN: {context.invoked_function_arn}")
-#     print(f"CloudWatch log stream name: {context.log_stream_name}")
-#     print(f"CloudWatch log group name: {context.log_group_name}")
-#     print(f"Lambda Request ID: {context.aws_request_id}")
-#     print(f"Lambda function memory limits in MB: {context.memory_limit_in_mb}")
-#     print(f"Lambda time remaining in MS: {context.get_remaining_time_in_millis()}")
-#     print(f"_HANDLER: {os.environ['_HANDLER']}")
-#     print(f"AWS_EXECUTION_ENV: {os.environ['AWS_EXECUTION_ENV']}")
-#     # print(f"AWS_LAMBDA_FUNCTION_MEMORY_SIZE: {os.environ['AWS_LAMBDA_FUNCTION_MEMORY_SIZE']}")
+def get_spatiotemporal_indices(
+        input_zarr_bucket: str,
+        input_zarr_path: str,
+) -> tuple:
+    """
+    Assumes that there is a GeoJSON file in the file-level Zarr store.
 
+    :param str input_zarr_bucket: Input bucket where file-level Zarr store exists.
+    :param str input_zarr_path: Input bucket path where file-level Zarr store exists.
+    :return: (list, list, list): Returns the latitude, longitude, and epoch seconds
+    needed to properly index the data.
+    """
+    s3 = s3fs.S3FileSystem(
+        key=os.getenv('ACCESS_KEY_ID'),  # optional parameter
+        secret=os.getenv('SECRET_ACCESS_KEY'),
+    )
+    geo_json_s3_path = f's3://{input_zarr_bucket}/{input_zarr_path}/geo.json'
+    assert(s3.exists(geo_json_s3_path)), "S3 GeoJSON file does not exist."
+    geo_json = geopandas.read_file(
+        filename=geo_json_s3_path,
+        storage_options={
+            "key": os.getenv('ACCESS_KEY_ID'),  # Optional values
+            "secret": os.getenv('SECRET_ACCESS_KEY'),
+        },
+    )
+    geo_json.id = pd.to_datetime(geo_json.id)
+    geo_json.id.astype('datetime64[ns]')  # TODO: be careful with conversions for pandas >=2.0.0
+    epoch_seconds = (
+        pd.to_datetime(geo_json.dropna().id, unit='s', origin='unix') - pd.Timestamp('1970-01-01')
+    ) / pd.Timedelta('1s')
+    epoch_seconds = epoch_seconds.tolist()
+    longitude = geo_json.dropna().longitude.tolist()
+    latitude = geo_json.dropna().latitude.tolist()
+    #
+    return latitude, longitude, epoch_seconds
 
-#####################################################################
 
 # TODO: need to pass in key/secret as optionals
-def read_s3_zarr_store(
-        s3_zarr_store_path: str='s3://noaa-wcsd-zarr-pds/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr'
-) -> xr.core.dataset.Dataset:
+def s3_zarr_as_xr(s3_zarr_store_path: str) -> xr.core.dataset.Dataset:
     """Reads an existing Zarr store in a s3 bucket.
 
     Parameters
@@ -146,11 +167,118 @@ def read_s3_zarr_store(
     )
     store = s3fs.S3Map(root=s3_zarr_store_path, s3=s3_fs, check=False)
     # You are already using dask, this is assumed by open_zarr, not the same as open_dataset(engine=“zarr”)
-    return xr.open_zarr(store=store, synchronizer=SYNCHRONIZER, consolidated=True)
+    return xr.open_zarr(store=store, consolidated=True) # synchronizer=SYNCHRONIZER
 
 # TODO: will need to input just the zarr store name,
 
+
+def s3_zarr(
+        output_zarr_bucket: str,
+        ship_name: str,
+        cruise_name: str,
+        sensor_name: str,
+        # zarr_synchronizer: Union[str, None] = None,
+):
+    # Environment variables are optional parameters
+    s3 = s3fs.S3FileSystem(
+        key=os.getenv('ACCESS_KEY_ID'),
+        secret=os.getenv('SECRET_ACCESS_KEY'),
+    )
+    root = f's3://{output_zarr_bucket}/level_2/{ship_name}/{cruise_name}/{sensor_name}/{cruise_name}.zarr'
+    # TODO: check if directory exists
+    store = s3fs.S3Map(root=root, s3=s3, check=True)
+    # TODO: properly synchronize with efs mount
+    # TODO: zarr.ThreadSynchronizer()
+    # Note: 'r+' means read/write (store must already exist)
+    cruise_zarr = zarr.open(store=store, mode="r+") #, zarr_synchronizer=zarr_synchronizer)
+    return cruise_zarr
+
+
+def interpolate_data(
+        df: pd.DataFrame,
+        file_zarr: xr.Dataset,
+        cruise_zarr: zarr.Group,
+        start_ping_time_index: int,
+        end_ping_time_index: int,
+) -> np.ndarray:
+    minimum_resolution = np.nanmin(np.float32(df['MIN_ECHO_RANGE']))
+    frequencies = cruise_zarr.frequency[:]
+    all_Sv = file_zarr.Sv.values  # read remotely once to speed up
+    all_echo_range = file_zarr.echo_range.values
+    all_Sv_prototype = np.empty(shape=cruise_zarr.sv[:, start_ping_time_index:end_ping_time_index, :].shape)
+    all_Sv_prototype[:, :, :] = np.nan
+    for freq in range(len(frequencies)):
+        for ping_time in range(end_ping_time_index - start_ping_time_index):  # 696120
+            # print(f'{ping_time} of start: {start_ping_time_index} to end: {end_ping_time_index} for freq: {freq}')
+            current_max_depth_meters = np.nanmax(all_echo_range[freq, ping_time, :])  # 249.79 meters
+            y = all_Sv[freq, ping_time, :] # local copy
+            ###
+            x = np.linspace(
+                start=0,
+                stop=np.ceil(current_max_depth_meters),
+                num=len(y),
+                endpoint=True
+            )
+            ###
+            # x: A 1-D array of real values.
+            # y: A N-D array of real values. The length of y along the interpolation axis must be equal to the length of x.
+            f = interpolate.interp1d(  # Interpolate a 1-D function.
+                x=x,
+                y=y,
+                kind='previous'
+            )
+            ###
+            x_new = np.linspace(
+                start=0, #minimum_resolution,
+                stop=x[-1],
+                num=int(np.ceil(current_max_depth_meters / minimum_resolution)) + 1,
+                endpoint=True
+            )
+            ###
+            y_new = f(x_new)  # TODO: too small by one? --> 1301
+            y_new_height = y_new.shape[0]
+            # Note: dimensions are (depth, time, frequency)
+            all_Sv_prototype[:y_new_height, ping_time, freq] = y_new # (5208, 89911, 4)
+    #
+    return all_Sv_prototype
+
+
 # Based off of: https://github.com/oftfrfbf/watercolumn/blob/master/scripts/zarr_upsample.py
+# file_info = {
+#     'PIPELINE_TIME': '2023-05-23T13:45:10Z',
+#     'FILE_NAME': 'D20070711-T182032.raw',
+#     'START_TIME': '2007-07-11T18:20:32.656Z',
+#     'ZARR_BUCKET': 'noaa-wcsd-zarr-pds',
+#     'MAX_ECHO_RANGE': Decimal('249.792'),
+#     'NUM_PING_TIME_DROPNA': Decimal('9778'),
+#     'PIPELINE_STATUS': 'SUCCESS',
+#     'ZARR_PATH': 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr',
+#     'CRUISE_NAME': 'HB0707',
+#     'MIN_ECHO_RANGE': Decimal('0.192'),
+#     'FREQUENCIES': [Decimal('18000'), Decimal('38000'), Decimal('120000'), Decimal('200000')],
+#     'END_TIME': '2007-07-11T21:07:08.360Z',
+#     'SENSOR_NAME': 'EK60',
+#     'SHIP_NAME': 'Henry_B._Bigelow',
+#     'CHANNELS': ['GPT  18 kHz 009072056b0e 2 ES18-11', 'GPT  38 kHz 0090720346bc 1 ES38B', 'GPT 120 kHz 0090720580f1 3 ES120-7C', 'GPT 200 kHz 009072034261 4 ES200-7C']
+# }
+
+
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T210709.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T033431.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T061745.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T100505.zarr'
+
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T124906.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T171804.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T201647.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T202050.zarr'
+input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T231759.zarr'
+
+
 def main(
     context: dict,
     prefix: str = 'rudy',
@@ -158,9 +286,7 @@ def main(
     cruise_name: str = 'HB0707',
     sensor_name: str = 'EK60',
     input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.zarr',
-    output_zarr_bucket: str = 'noaa-wcsd-zarr-pds',
-    output_zarr_path: str = 'level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr',
-    zarr_synchronizer: Union[str, None] = None,
+    # zarr_synchronizer: Union[str, None] = None,
 ) -> None:
     """This Lambda runs once per file-level Zarr store. It begins by
     resampling the data for a file-level Zarr store. It then gets
@@ -170,6 +296,8 @@ def main(
 
     Parameters
     ----------
+    context : dict
+        The AWS context passed down from handler.
     prefix : str
         The desired prefix for this specific deployment of the template.
     ship_name : str
@@ -194,9 +322,9 @@ def main(
         No return value.
     """
     #################################################################
-    os.chdir(TEMPDIR)  # run code in /tmp directory
+    os.chdir(TEMPDIR)  # run code in /tmp directory for lambda
     #################################################################
-    # [0] get dynamoDB table info ####################################
+    # [0] get dynamoDB table info
     df = get_table_as_dataframe(
         prefix=prefix,
         ship_name=ship_name,
@@ -205,144 +333,72 @@ def main(
     )
     # Zarr path is derived from DynamoDB
     assert(input_zarr_path in list(df['ZARR_PATH'])), "The Zarr path is not found in the database."
-    # 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
-    index = df.index[df['ZARR_PATH'] == input_zarr_path][0]
     #
+    index = df.index[df['ZARR_PATH'] == input_zarr_path][0]
     print(index)
+    #
     file_info = df.iloc[index].to_dict()
-    # store_info = {
-    #     'PIPELINE_TIME': '2023-05-23T13:45:10Z',
-    #     'FILE_NAME': 'D20070711-T182032.raw',
-    #     'START_TIME': '2007-07-11T18:20:32.656Z',
-    #     'ZARR_BUCKET': 'noaa-wcsd-zarr-pds',
-    #     'MAX_ECHO_RANGE': Decimal('249.792'),
-    #     'NUM_PING_TIME_DROPNA': Decimal('9778'),
-    #     'PIPELINE_STATUS': 'SUCCESS',
-    #     'ZARR_PATH': 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr',
-    #     'CRUISE_NAME': 'HB0707',
-    #     'MIN_ECHO_RANGE': Decimal('0.192'),
-    #     'FREQUENCIES': [Decimal('18000'), Decimal('38000'), Decimal('120000'), Decimal('200000')],
-    #     'END_TIME': '2007-07-11T21:07:08.360Z',
-    #     'SENSOR_NAME': 'EK60',
-    #     'SHIP_NAME': 'Henry_B._Bigelow',
-    #     'CHANNELS': ['GPT  18 kHz 009072056b0e 2 ES18-11', 'GPT  38 kHz 0090720346bc 1 ES38B', 'GPT 120 kHz 0090720580f1 3 ES120-7C', 'GPT 200 kHz 009072034261 4 ES200-7C']
-    # }
     input_zarr_bucket = file_info['ZARR_BUCKET']
     input_zarr_path = file_info['ZARR_PATH']
+    output_zarr_bucket = file_info['ZARR_BUCKET']
     #
-    #df.iloc[:index]['NUM_PING_TIME_DROPNA']
-    # TODO: Delete this...
-    # start_ping_time_index = 0
-    # if len( np.cumsum(df.iloc[:index]['NUM_PING_TIME_DROPNA']).values ) > 0:
-    #     start_ping_time_index = start_ping_time_index + np.cumsum(df.iloc[:index]['NUM_PING_TIME_DROPNA']).values[-1]
-    # end_ping_time_index = int(start_ping_time_index + df.iloc[index]['NUM_PING_TIME_DROPNA'])
-    #################################################################
     #################################################################
     # [1] read file-level Zarr store using xarray
-    file_zarr = read_s3_zarr_store(
+    file_zarr = s3_zarr_as_xr(
         s3_zarr_store_path=f's3://{input_zarr_bucket}/{input_zarr_path}'
     )
     #########################################################################
-    # [2] extract gps and time coordinate from file-level Zarr store
-    # reference: https://osoceanacoustics.github.io/echopype-examples/echopype_tour.html
-    s3 = s3fs.S3FileSystem(
-        key=os.getenv('ACCESS_KEY_ID'),  # optional parameter
-        secret=os.getenv('SECRET_ACCESS_KEY'),
-    )
-    geo_json_s3_path = f's3://{input_zarr_bucket}/{input_zarr_path}/geo.json'
-    assert(
-        s3.exists(geo_json_s3_path)
-    ), "S3 GeoJSON file does not exist."
-    geo_json = geopandas.read_file(
-        filename=geo_json_s3_path,
-        storage_options={
-            "key": os.getenv('ACCESS_KEY_ID'),  # Optional values
-            "secret": os.getenv('SECRET_ACCESS_KEY'),
-        },
-    )
-    geo_json.id = pd.to_datetime(geo_json.id)
-    geo_json.id.astype('datetime64[ns]')
-    epoch_seconds = (pd.to_datetime(geo_json.dropna().id, unit='s', origin='unix') - pd.Timestamp('1970-01-01')) / pd.Timedelta('1s')
-    # 1184178032.6569998
     #########################################################################
-    # [4] open cruise level zarr store for writing
-    root = f's3://{input_zarr_bucket}/{output_zarr_path}'
-    store = s3fs.S3Map(root=root, s3=s3, check=True)
-    # TODO: properly synchronize with efs mount
-    cruise_zarr = zarr.open(store=store, mode="r+", zarr_synchronizer=zarr_synchronizer)  # 'r+' means read/write (store must already exist)
+    # [2] open cruise level zarr store for writing
+    # output_zarr_path: str = f'',
+    cruise_zarr = s3_zarr(
+        output_zarr_bucket,
+        ship_name,
+        cruise_name,
+        sensor_name,
+        # zarr_synchronizer
+    )
     #########################################################################
-    # [5] Get indexing correct so that we can
+    # [3] Get needed indices
     # https://github.com/oftfrfbf/watercolumn/blob/8b7ed605d22f446e1d1f3087971c31b83f1b5f4c/scripts/scan_watercolumn_bucket_by_size.py#L138
-    total_width_traversed = 0
     # Offset from start index to insert new data. Note that missing values are excluded.
-    ping_time_cumsum = np.insert( np.cumsum( df['NUM_PING_TIME_DROPNA'].to_numpy(dtype=int) ), obj=0, values=0 )
-    start_ping_time_index = ping_time_cumsum[index]
-    end_ping_time_index = ping_time_cumsum[index+1] # - 1  # TODO: might not need to subtract one
-    #
-    # cruise level values
-    width = cruise_zarr.time.shape[0]
-    height = cruise_zarr.depth.shape[0]
-    #
-    print(
-        f"total width: {width},"
-        f"total height: {height},"
-        f"total_width_traversed: {total_width_traversed},"
-        f"s: {start_ping_time_index}, e: {end_ping_time_index}"
+    ping_time_cumsum = np.insert(
+        np.cumsum(df['NUM_PING_TIME_DROPNA'].to_numpy(dtype=int)),
+        obj=0,
+        values=0
     )
-    #########################################################################
-    # [6] write subset of ping_time to the larger zarr store
-    assert(
-        len(epoch_seconds.tolist()) == len(cruise_zarr.time[start_ping_time_index:end_ping_time_index])
-    ), "Number of the timestamps is not equivalent to indices given."
-    cruise_zarr.time[start_ping_time_index:end_ping_time_index] = epoch_seconds.tolist()
-    #########################################################################
-    # [7] write subset of longitude to the larger zarr store
-    cruise_zarr.longitude[start_ping_time_index:end_ping_time_index] = geo_json.dropna().longitude.tolist()
-    #########################################################################
-    # [7b] write subset of latitude
-    cruise_zarr.latitude[start_ping_time_index:end_ping_time_index] = geo_json.dropna().latitude.tolist()
-    #########################################################################
-    # [9] write subset of _ to the larger zarr store
-    #z_resample.time[start_index:end_index] = ds_temp.time.values.astype(np.int64) / 1e9
-    minimum_resolution = np.nanmin(np.float32(df['MIN_ECHO_RANGE']))
-    total_width_traversed += width
-    frequencies = cruise_zarr.frequency[:]
-    all_Sv = file_zarr.Sv.values
-    all_echo_range = file_zarr.echo_range.values
-    all_Sv_prototype = np.empty(shape=cruise_zarr.sv[:, start_ping_time_index:end_ping_time_index, :].shape)
-    all_Sv_prototype[:, :, :] = np.nan
-    for freq in range(len(frequencies)):
-        for ping_time in range(end_ping_time_index - start_ping_time_index):  # 696120
-            print(f'{ping_time} of start: {start_ping_time_index} to end: {end_ping_time_index} for freq: {freq}')
-            current_max_depth_meters = np.nanmax(all_echo_range[freq, ping_time, :])  # 249.79 meters
-            y = all_Sv[freq, ping_time, :]
-            x = np.linspace(
-                start=0,
-                stop=np.ceil(current_max_depth_meters),
-                num=len(y),
-                endpoint=True
-            )
-            # x: A 1-D array of real values.
-            # y: A N-D array of real values. The length of y along the interpolation axis must be equal to the length of x.
-            f = interpolate.interp1d(
-                x=x,
-                y=y,
-                kind='previous'
-            )
-            x_new = np.linspace(
-                start=0, #minimum_resolution,
-                stop=x[-1],
-                num=int(np.ceil(current_max_depth_meters / minimum_resolution)) + 1,
-                endpoint=True
-            )
-            y_new = f(x_new)  # too small by one --> 1301
-            y_new_height = y_new.shape[0]
-            # Note: dimensions are (depth, time, frequency)
-            all_Sv_prototype[:y_new_height, ping_time, freq] = y_new # (5208, 89911, 4)
+    start_ping_time_index = ping_time_cumsum[index]
+    end_ping_time_index = ping_time_cumsum[index+1]
     #
+    #########################################################################
+    # [4] extract gps and time coordinate from file-level Zarr store,
+    # write subset of ping_time to the larger zarr store
+    # reference: https://osoceanacoustics.github.io/echopype-examples/echopype_tour.html
+    latitude, longitude, epoch_seconds = get_spatiotemporal_indices(input_zarr_bucket, input_zarr_path)
+    assert(
+        len(epoch_seconds) == len(cruise_zarr.time[start_ping_time_index:end_ping_time_index])
+    ), "Number of the timestamps is not equivalent to indices given."
+    cruise_zarr.time[start_ping_time_index:end_ping_time_index] = epoch_seconds
+    #########################################################################
+    # [5] write subset of latitude/longitude
+    cruise_zarr.latitude[start_ping_time_index:end_ping_time_index] = latitude
+    cruise_zarr.longitude[start_ping_time_index:end_ping_time_index] = longitude
+    #########################################################################
+    # [6] get interpolated Sv data
+    all_Sv_prototype = interpolate_data(
+        df=df,
+        file_zarr=file_zarr,
+        cruise_zarr=cruise_zarr,
+        start_ping_time_index=start_ping_time_index,
+        end_ping_time_index=end_ping_time_index,
+    )
     cruise_zarr.sv[:, start_ping_time_index:end_ping_time_index, :] = all_Sv_prototype
+    #
+    cruise_zarr.sv.info
     print('done')
     # logger.info("Finishing lambda.")
+    # TODO: Work on synchronizing the data as written
+
 
 #####################################################################
 def lambda_handler(event: dict, context: dict) -> dict:
