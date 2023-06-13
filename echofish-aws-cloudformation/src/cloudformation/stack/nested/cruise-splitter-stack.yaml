@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Triggers Events For Files Per Cruise
+
+Parameters:
+  DeploymentBucketName:
+    Type: String
+  PermissionsBoundary:
+    Type: String
+  MaxConcurrency:
+    Type: Number
+  Timeout:
+    Type: Number
+  MemorySize:
+    Type: Number
+  InputBucketName:
+    Type: String
+  LogRetentionInDays:
+    Type: Number
+  DeadLetterTopicArn:
+    Type: String
+  Version:
+    Type: String
+  DoneTopicArn:
+    Type: String
+  FileInfoTableArn:
+    Type: String
+  FileInfoTableName:
+    Type: String
+  QueueArn:
+    Type: String
+
+
+Conditions:
+  HasPermissionsBoundary:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - !Ref PermissionsBoundary
+
+Resources:
+
+  Role:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary:
+        Fn::If:
+          - HasPermissionsBoundary
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaRolePermissionsBoundary}
+          - AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+        - PolicyName: SQS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Ref QueueArn
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
+        - PolicyName: S3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:s3:::${InputBucketName}
+                Action:
+                  - s3:ListBucket
+        - PolicyName: DynamoDB
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Ref FileInfoTableArn
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:PutItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                  - dynamodb:DeleteItem
+        - PolicyName: SNS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Ref DeadLetterTopicArn
+                  - !Ref DoneTopicArn
+                Action:
+                  - sns:Publish
+
+  Lambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/echofish-aws-cruise-splitter-lambda-${Version}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.cruisesplit.CruiseSplitterLambda::handleRequest
+      Runtime: java11
+      MemorySize: !Ref MemorySize
+      Timeout: !Ref Timeout
+      ReservedConcurrentExecutions: !Ref MaxConcurrency
+      Role: !GetAtt Role.Arn
+      Environment:
+        Variables:
+          INPUT_BUCKET: !Ref InputBucketName
+          TOPIC_ARN: !Ref DoneTopicArn
+          TABLE_NAME: !Ref FileInfoTableName
+
+  Trigger:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      Enabled: true
+      EventSourceArn: !Ref QueueArn
+      FunctionName: !Ref Lambda
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${Lambda}
+      RetentionInDays: !Ref LogRetentionInDays
+
+  LambdaEvent:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref Lambda
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0
+      DestinationConfig:
+        OnFailure:
+          Destination: !Ref DeadLetterTopicArn
+
+
+Outputs:
+  LambdaArn:
+    Value: !GetAtt Lambda.Arn
+  LambdaName:
+    Value: !Ref Lambda
+
+
+
+
+

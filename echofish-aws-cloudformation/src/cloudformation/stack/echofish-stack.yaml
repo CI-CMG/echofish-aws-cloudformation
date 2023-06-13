@@ -96,7 +96,30 @@ Parameters:
     MaxValue: 900
     Default: 600
 
+  CruiseSplitterLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 1024
+  CruiseSplitterLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 240
+  CruiseSplitterLambdaConcurrency:
+    Type: Number
+    MinValue: 1
+    Default: 3
 
+Conditions:
+  CruiseSplitterLambdaIsRelease:
+    Fn::Equals:
+      - @CruiseSplitterLambda.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @CruiseSplitterLambda.version@
 
 Resources:
 
@@ -152,6 +175,45 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
+  CruiseSplitterLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        PermissionsBoundary: !Ref RolePermissionsBoundary
+        MaxConcurrency: !Ref CruiseSplitterLambdaConcurrency
+        Timeout: !Ref CruiseSplitterLambdaTimeout
+        MemorySize: !Ref CruiseSplitterLambdaMemorySize
+        InputBucketName: !Ref RawSourceBucket
+        LogRetentionInDays: !Ref LogRetentionInDays
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.CruiseSplitterDeadLetterQueueArn
+        Version: !If [CruiseSplitterLambdaIsRelease, @CruiseSplitterLambda.version@, @CruiseSplitterLambda.version@@dashTimestamp@]
+        DoneTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.CruiseSplitterLambdaTopicArn
+        FileInfoTableArn:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableArn
+        FileInfoTableName:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableName
+        QueueArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.CruiseSplitterLambdaQueueArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/cruise-splitter-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
   RawToZarrLambdaStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -169,10 +231,8 @@ Resources:
           Fn::GetAtt:
             - DynamoDbStack
             - Outputs.FileInfoTableName
-        RawSourceBucket:
-          Type: !Ref RawSourceBucket
-        OutputBucket:
-          Type: !Ref OutputBucket
+        RawSourceBucket: !Ref RawSourceBucket
+        OutputBucket: !Ref OutputBucket
         RawToZarrLambdaQueueArn:
           Fn::GetAtt:
             - MessagingStack

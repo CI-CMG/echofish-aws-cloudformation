@@ -4,17 +4,17 @@
   <formats>
     <format>zip</format>
   </formats>
-<!--  <dependencySets>-->
-<!--   <dependencySet>-->
-<!--     <outputDirectory>lambda</outputDirectory>-->
-<!--     <unpack>false</unpack>-->
-<!--     <useTransitiveDependencies>false</useTransitiveDependencies>-->
-<!--     <outputFileNameMapping>${artifact.artifactId}-${artifact.baseVersion}${dashTimestamp}${dashClassifier?}.${artifact.extension}</outputFileNameMapping>-->
-<!--     <includes>-->
-<!--       <include>*:*:*:lambda</include>-->
-<!--     </includes>-->
-<!--     <useProjectArtifact>false</useProjectArtifact>-->
-<!--   </dependencySet>-->
+  <dependencySets>
+   <dependencySet>
+     <outputDirectory>lambda</outputDirectory>
+     <unpack>false</unpack>
+     <useTransitiveDependencies>false</useTransitiveDependencies>
+     <outputFileNameMapping>${artifact.artifactId}-${artifact.baseVersion}${dashTimestamp}${dashClassifier?}.${artifact.extension}</outputFileNameMapping>
+     <includes>
+       <include>*:*:*:lambda</include>
+     </includes>
+     <useProjectArtifact>false</useProjectArtifact>
+   </dependencySet>
 <!--    <dependencySet>-->
 <!--      <outputDirectory>ui</outputDirectory>-->
 <!--      <unpack>false</unpack>-->
@@ -25,7 +25,7 @@
 <!--      </includes>-->
 <!--      <useProjectArtifact>false</useProjectArtifact>-->
 <!--    </dependencySet>-->
-<!--  </dependencySets>-->
+  </dependencySets>
 <!--  <files>-->
 <!--    <file>-->
 <!--      <source>${project.parent.basedir}/echofish-aws-mvtgen/target/echofish-aws-mvtgen-${project.version}-docker.tar.gz</source>-->

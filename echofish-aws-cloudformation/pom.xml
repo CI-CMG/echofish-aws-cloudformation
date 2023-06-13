@@ -26,7 +26,7 @@ Instructions for adding or updating a new deployment resource:
 -->
 
   <properties>
-
+    <CruiseSplitterLambda.version>1.0.0-SNAPSHOT</CruiseSplitterLambda.version>
 <!--    <geoh.version>1.0.0-SNAPSHOT</geoh.version>-->
 <!--    <r2z.version>1.0.0-SNAPSHOT</r2z.version>-->
 <!--    <cr.version>1.0.0-SNAPSHOT</cr.version>-->
@@ -90,7 +90,14 @@ Instructions for adding or updating a new deployment resource:
     </repository>
   </repositories>
 
-<!--  <dependencies>-->
+  <dependencies>
+        <dependency>
+          <groupId>io.github.ci-cmg.echofish</groupId>
+          <artifactId>echofish-aws-cruise-splitter-lambda</artifactId>
+          <version>${CruiseSplitterLambda.version}</version>
+          <classifier>lambda</classifier>
+          <type>zip</type>
+        </dependency>
 <!--    <dependency>-->
 <!--      <groupId>io.github.ci-cmg.echofish</groupId>-->
 <!--      <artifactId>echofish-aws-geohash-lambda</artifactId>-->
@@ -148,7 +155,7 @@ Instructions for adding or updating a new deployment resource:
 <!--      <classifier>lambda</classifier>-->
 <!--      <type>zip</type>-->
 <!--    </dependency>-->
-<!--  </dependencies>-->
+  </dependencies>
   <build>
     <extensions>
       <extension>
@@ -164,26 +171,26 @@ Instructions for adding or updating a new deployment resource:
         <artifactId>maven-resources-plugin</artifactId>
         <version>3.1.0</version>
         <executions>
-<!--          <execution>-->
-<!--            <id>resources</id>-->
-<!--            <phase>initialize</phase>-->
-<!--            <goals>-->
-<!--              <goal>copy-resources</goal>-->
-<!--            </goals>-->
-<!--            <configuration>-->
-<!--              <outputDirectory>${basedir}/target/resources</outputDirectory>-->
-<!--              <useDefaultDelimiters>false</useDefaultDelimiters>-->
-<!--              <delimiters>-->
-<!--                <delimiter>@</delimiter>-->
-<!--              </delimiters>-->
-<!--              <resources>-->
-<!--                <resource>-->
-<!--                  <directory>resources</directory>-->
-<!--                  <filtering>true</filtering>-->
-<!--                </resource>-->
-<!--              </resources>-->
-<!--            </configuration>-->
-<!--          </execution>-->
+          <execution>
+            <id>resources</id>
+            <phase>initialize</phase>
+            <goals>
+              <goal>copy-resources</goal>
+            </goals>
+            <configuration>
+              <outputDirectory>${basedir}/target/resources</outputDirectory>
+              <useDefaultDelimiters>false</useDefaultDelimiters>
+              <delimiters>
+                <delimiter>@</delimiter>
+              </delimiters>
+              <resources>
+                <resource>
+                  <directory>resources</directory>
+                  <filtering>true</filtering>
+                </resource>
+              </resources>
+            </configuration>
+          </execution>
           <execution>
             <id>cloudformation</id>
             <phase>generate-resources</phase>

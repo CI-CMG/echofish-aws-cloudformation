@@ -11,6 +11,42 @@ Resources:
 
   ##### Queues #####
 
+  RawToZarrDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-raw-to-zarr-dlq
+
+  ResampleDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-resample-dlq
+
+  CruiseSplitterDeadLetterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-cruise-splitter-dlq
+
   IndexLambdaQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -24,7 +60,22 @@ Resources:
       QueueName: !Sub ${StackPrefix}-index
 #      RedrivePolicy:
 #        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
-#        maxReceiveCount: !Ref MessageMaxReceiveCount
+#        maxReceiveCount: 1
+
+  CruiseSplitterLambdaQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-cruise-splitter
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt CruiseSplitterDeadLetterQueue.Arn
+        maxReceiveCount: 1
 
   RawToZarrLambdaQueue:
     Type: AWS::SQS::Queue
@@ -37,9 +88,24 @@ Resources:
       # Set to a little more than the maximum Lambda time
       VisibilityTimeout: 1200
       QueueName: !Sub ${StackPrefix}-raw-to-zarr
-  #      RedrivePolicy:
-  #        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
-  #        maxReceiveCount: !Ref MessageMaxReceiveCount
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RawToZarrDeadLetterQueue.Arn
+        maxReceiveCount: 1
+
+  RawToZarrEc2Queue:
+    Type: AWS::SQS::Queue
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      # Set to a little more than the maximum Lambda time
+      VisibilityTimeout: 1200
+      QueueName: !Sub ${StackPrefix}-raw-to-zarr
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt RawToZarrDeadLetterQueue.Arn
+        maxReceiveCount: 1
 
   ResampleAndWriteToZarrStoreLambdaQueue:
     Type: AWS::SQS::Queue
@@ -52,9 +118,9 @@ Resources:
       # Set to a little more than the maximum Lambda time
       VisibilityTimeout: 1200
       QueueName: !Sub ${StackPrefix}-resample-zarr
-  #      RedrivePolicy:
-  #        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
-  #        maxReceiveCount: !Ref MessageMaxReceiveCount
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ResampleDeadLetterQueue.Arn
+        maxReceiveCount: 1
 
 
   CreateEmptyZarrStoreLambdaQueue:
@@ -68,9 +134,9 @@ Resources:
       # Set to a little more than the maximum Lambda time
       VisibilityTimeout: 1200
       QueueName: !Sub ${StackPrefix}-zarr-init
-  #      RedrivePolicy:
-  #        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
-  #        maxReceiveCount: !Ref MessageMaxReceiveCount
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ResampleDeadLetterQueue.Arn
+        maxReceiveCount: 1
 
 
   ##### Queues #####
@@ -85,6 +151,16 @@ Resources:
         - Key: StackPrefix
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-trigger-index
+
+  CruiseSplitterLambdaTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-cruise-splitter-done
 
 
   ##### Topics #####
@@ -133,7 +209,16 @@ Outputs:
     Value: !GetAtt ResampleAndWriteToZarrStoreLambdaQueue.Arn
   CreateEmptyZarrStoreLambdaQueueArn:
     Value: !GetAtt CreateEmptyZarrStoreLambdaQueue.Arn
-
+  RawToZarrDeadLetterQueueArn:
+    Value: !GetAtt RawToZarrDeadLetterQueue.Arn
+  CruiseSplitterDeadLetterQueueArn:
+    Value: !GetAtt CruiseSplitterDeadLetterQueue.Arn
+  ResampleDeadLetterQueueArn:
+    Value: !GetAtt ResampleDeadLetterQueue.Arn
+  CruiseSplitterLambdaTopicArn:
+    Value: !Ref CruiseSplitterLambdaTopic
+  CruiseSplitterLambdaQueueArn:
+    Value: !GetAtt CruiseSplitterLambdaQueue.Arn
 
 
 
