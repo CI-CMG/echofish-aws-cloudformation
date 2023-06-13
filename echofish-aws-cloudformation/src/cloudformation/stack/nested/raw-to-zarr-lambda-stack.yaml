@@ -25,6 +25,10 @@ Parameters:
     Type: String
   OutputBucket:
     Type: String
+  OutputBucketUserAccessKeyPsName:
+    Type: String
+  OutputBucketUserSecretAccessKeyPsName:
+    Type: String
 
 
 Conditions:
@@ -105,6 +109,8 @@ Resources:
           TABLE_NAME: !Ref FileInfoTableName
           INPUT_BUCKET: !Ref RawSourceBucket
           OUTPUT_BUCKET: !Ref RawSourceBucket
+          OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm-secure:${OutputBucketUserAccessKeyPsName}:1}}"
+          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm-secure:${OutputBucketUserSecretAccessKeyPsName}:1}}"
 
   Trigger:
     Type: AWS::Lambda::EventSourceMapping
