@@ -16,8 +16,8 @@ Parameters:
     Type: String
   LogRetentionInDays:
     Type: Number
-  DeadLetterTopicArn:
-    Type: String
+#  DeadLetterTopicArn:
+#    Type: String
   Version:
     Type: String
   DoneTopicArn:
@@ -45,7 +45,7 @@ Resources:
       PermissionsBoundary:
         Fn::If:
           - HasPermissionsBoundary
-          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaRolePermissionsBoundary}
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${PermissionsBoundary}
           - AWS::NoValue
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -106,7 +106,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Resource:
-                  - !Ref DeadLetterTopicArn
+#                  - !Ref DeadLetterTopicArn
                   - !Ref DoneTopicArn
                 Action:
                   - sns:Publish
@@ -149,9 +149,11 @@ Resources:
       FunctionName: !Ref Lambda
       Qualifier: $LATEST
       MaximumRetryAttempts: 0
-      DestinationConfig:
-        OnFailure:
-          Destination: !Ref DeadLetterTopicArn
+      # https://docs.aws.amazon.com/lambda/latest/dg/with-sqs.html
+      # Make sure that you configure the dead-letter queue on the source queue, not on the Lambda function. The dead-letter queue that you configure on a function is used for the function's asynchronous invocation queue, not for event source queues.
+#      DestinationConfig:
+#        OnFailure:
+#          Destination: !Ref DeadLetterTopicArn
 
 
 Outputs:

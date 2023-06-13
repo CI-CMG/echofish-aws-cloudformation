@@ -2,12 +2,20 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: EchoFish Stack
 
 Parameters:
+  OutputBucketUserAccessKeyPsName:
+    Type: String
+  OutputBucketUserSecretAccessKeyPsName:
+    Type: String
+  DevOutputBucketUserAlias:
+    Type: String
+    Default: ""
   RawSourceBucket:
     Type: String
     Default: noaa-wcsd-pds
   # noaa-wcsd-zarr-pds
-  OutputBucket:
+  OutputBucketName:
     Type: String
+    Default: ""
   CalibrationBucket:
     Type: String
     Default: noaa-wcsd-pds-index
@@ -120,6 +128,14 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @CruiseSplitterLambda.version@
+  BucketDrainLambdaIsRelease:
+    Fn::Equals:
+      - @BucketDrainLambda.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @BucketDrainLambda.version@
 
 Resources:
 
@@ -142,6 +158,25 @@ Resources:
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/messaging-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  BucketStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        StackPrefix: !Ref StackPrefix
+        EnvironmentType:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-environment-type
+        PermissionsBoundary: !Ref RolePermissionsBoundary
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        BucketDrainLambdaVersion: !If [ BucketDrainLambdaIsRelease, @BucketDrainLambda.version@, @BucketDrainLambda.version@@dashTimestamp@ ]
+        DevOutputBucketUserAlias: !Ref DevOutputBucketUserAlias
+        OutputBucketName: !Ref OutputBucketName
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/bucket-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
@@ -187,10 +222,10 @@ Resources:
         MemorySize: !Ref CruiseSplitterLambdaMemorySize
         InputBucketName: !Ref RawSourceBucket
         LogRetentionInDays: !Ref LogRetentionInDays
-        DeadLetterTopicArn:
-          Fn::GetAtt:
-            - MessagingStack
-            - Outputs.CruiseSplitterDeadLetterQueueArn
+#        DeadLetterTopicArn:
+#          Fn::GetAtt:
+#            - MessagingStack
+#            - Outputs.CruiseSplitterDeadLetterQueueArn
         Version: !If [CruiseSplitterLambdaIsRelease, @CruiseSplitterLambda.version@, @CruiseSplitterLambda.version@@dashTimestamp@]
         DoneTopicArn:
           Fn::GetAtt:
@@ -232,7 +267,10 @@ Resources:
             - DynamoDbStack
             - Outputs.FileInfoTableName
         RawSourceBucket: !Ref RawSourceBucket
-        OutputBucket: !Ref OutputBucket
+        OutputBucket:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.OutputBucketName
         RawToZarrLambdaQueueArn:
           Fn::GetAtt:
             - MessagingStack

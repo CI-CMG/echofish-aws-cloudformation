@@ -14,28 +14,29 @@
   <artifactId>echofish-aws-cloudformation</artifactId>
   <packaging>pom</packaging>
 
-<!--
-Instructions for adding or updating a new deployment resource:
+  <!--
+  Instructions for adding or updating a new deployment resource:
 
-1. Add a version property to the properties tag
-2. Add a <requireProperty> rule to the maven-enforcer-plugin
-3. Add a row to resources/resources.csv
-4. Rebuild the CodePipeline CloudFormation template by running mvn clean initialize from the parent project
-5. Update the template in AWS
+  1. Add a version property to the properties tag
+  2. Add a <requireProperty> rule to the maven-enforcer-plugin
+  3. Add a row to resources/resources.csv
+  4. Rebuild the CodePipeline CloudFormation template by running mvn clean initialize from the parent project
+  5. Update the template in AWS
 
--->
+  -->
 
   <properties>
     <CruiseSplitterLambda.version>1.0.0-SNAPSHOT</CruiseSplitterLambda.version>
-<!--    <geoh.version>1.0.0-SNAPSHOT</geoh.version>-->
-<!--    <r2z.version>1.0.0-SNAPSHOT</r2z.version>-->
-<!--    <cr.version>1.0.0-SNAPSHOT</cr.version>-->
-<!--    <za.version>1.0.0-SNAPSHOT</za.version>-->
-<!--    <ui.version>1.0.0-SNAPSHOT</ui.version>-->
-<!--    <api.version>1.0.0-SNAPSHOT</api.version>-->
-<!--    <ds.version>1.0.0-SNAPSHOT</ds.version>-->
-<!--    <cr.version>1.0.0-SNAPSHOT</cr.version>-->
-<!--    <mvt.version>1.0.0-SNAPSHOT</mvt.version>-->
+    <BucketDrainLambda.version>1.0.0-SNAPSHOT</BucketDrainLambda.version>
+    <!--    <geoh.version>1.0.0-SNAPSHOT</geoh.version>-->
+    <!--    <r2z.version>1.0.0-SNAPSHOT</r2z.version>-->
+    <!--    <cr.version>1.0.0-SNAPSHOT</cr.version>-->
+    <!--    <za.version>1.0.0-SNAPSHOT</za.version>-->
+    <!--    <ui.version>1.0.0-SNAPSHOT</ui.version>-->
+    <!--    <api.version>1.0.0-SNAPSHOT</api.version>-->
+    <!--    <ds.version>1.0.0-SNAPSHOT</ds.version>-->
+    <!--    <cr.version>1.0.0-SNAPSHOT</cr.version>-->
+    <!--    <mvt.version>1.0.0-SNAPSHOT</mvt.version>-->
 
     <project-root>${project.parent.basedir}</project-root>
     <dashTimestamp>-${maven.build.timestamp}</dashTimestamp>
@@ -91,70 +92,77 @@ Instructions for adding or updating a new deployment resource:
   </repositories>
 
   <dependencies>
-        <dependency>
-          <groupId>io.github.ci-cmg.echofish</groupId>
-          <artifactId>echofish-aws-cruise-splitter-lambda</artifactId>
-          <version>${CruiseSplitterLambda.version}</version>
-          <classifier>lambda</classifier>
-          <type>zip</type>
-        </dependency>
-<!--    <dependency>-->
-<!--      <groupId>io.github.ci-cmg.echofish</groupId>-->
-<!--      <artifactId>echofish-aws-geohash-lambda</artifactId>-->
-<!--      <version>${geoh.version}</version>-->
-<!--      <classifier>lambda</classifier>-->
-<!--      <type>zip</type>-->
-<!--    </dependency>-->
-<!--    <dependency>-->
-<!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-<!--      <artifactId>echofish-aws-raw2zarr</artifactId>-->
-<!--      <version>${r2z.version}</version>-->
-<!--      <classifier>docker</classifier>-->
-<!--      <type>tar.gz</type>-->
-<!--    </dependency>-->
-<!--    <dependency>-->
-<!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-<!--      <artifactId>echofish-aws-custom-resource-lambda</artifactId>-->
-<!--      <version>${cr.version}</version>-->
-<!--      <classifier>lambda</classifier>-->
-<!--      <type>zip</type>-->
-<!--    </dependency>-->
-<!--    <dependency>-->
-<!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-<!--      <artifactId>echofish-aws-ui</artifactId>-->
-<!--      <version>${ui.version}</version>-->
-<!--      <classifier>zip</classifier>-->
-<!--      <type>zip</type>-->
-<!--    </dependency>-->
-<!--    <dependency>-->
-<!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-<!--      <artifactId>echofish-aws-api-lambda</artifactId>-->
-<!--      <version>${api.version}</version>-->
-<!--      <classifier>lambda</classifier>-->
-<!--      <type>zip</type>-->
-<!--    </dependency>-->
-<!--    <dependency>-->
-<!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-<!--      <artifactId>echofish-aws-dynamic-stack-lambda</artifactId>-->
-<!--      <version>${ds.version}</version>-->
-<!--      <classifier>lambda</classifier>-->
-<!--      <type>zip</type>-->
-<!--    </dependency>-->
+    <dependency>
+      <groupId>io.github.ci-cmg.echofish</groupId>
+      <artifactId>echofish-aws-cruise-splitter-lambda</artifactId>
+      <version>${CruiseSplitterLambda.version}</version>
+      <classifier>lambda</classifier>
+      <type>zip</type>
+    </dependency>
+    <dependency>
+      <groupId>io.github.ci-cmg.aws</groupId>
+      <artifactId>aws-cf-custom-resource-bucket-drain</artifactId>
+      <version>${BucketDrainLambda.version}</version>
+      <classifier>lambda</classifier>
+      <type>zip</type>
+    </dependency>
+    <!--    <dependency>-->
+    <!--      <groupId>io.github.ci-cmg.echofish</groupId>-->
+    <!--      <artifactId>echofish-aws-geohash-lambda</artifactId>-->
+    <!--      <version>${geoh.version}</version>-->
+    <!--      <classifier>lambda</classifier>-->
+    <!--      <type>zip</type>-->
+    <!--    </dependency>-->
+    <!--    <dependency>-->
+    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
+    <!--      <artifactId>echofish-aws-raw2zarr</artifactId>-->
+    <!--      <version>${r2z.version}</version>-->
+    <!--      <classifier>docker</classifier>-->
+    <!--      <type>tar.gz</type>-->
+    <!--    </dependency>-->
+    <!--    <dependency>-->
+    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
+    <!--      <artifactId>echofish-aws-custom-resource-lambda</artifactId>-->
+    <!--      <version>${cr.version}</version>-->
+    <!--      <classifier>lambda</classifier>-->
+    <!--      <type>zip</type>-->
+    <!--    </dependency>-->
+    <!--    <dependency>-->
+    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
+    <!--      <artifactId>echofish-aws-ui</artifactId>-->
+    <!--      <version>${ui.version}</version>-->
+    <!--      <classifier>zip</classifier>-->
+    <!--      <type>zip</type>-->
+    <!--    </dependency>-->
+    <!--    <dependency>-->
+    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
+    <!--      <artifactId>echofish-aws-api-lambda</artifactId>-->
+    <!--      <version>${api.version}</version>-->
+    <!--      <classifier>lambda</classifier>-->
+    <!--      <type>zip</type>-->
+    <!--    </dependency>-->
+    <!--    <dependency>-->
+    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
+    <!--      <artifactId>echofish-aws-dynamic-stack-lambda</artifactId>-->
+    <!--      <version>${ds.version}</version>-->
+    <!--      <classifier>lambda</classifier>-->
+    <!--      <type>zip</type>-->
+    <!--    </dependency>-->
 
-<!--    <dependency>-->
-<!--      <groupId>io.github.ci-cmg.echofish</groupId>-->
-<!--      <artifactId>echofish-aws-mvt-lambda</artifactId>-->
-<!--      <version>${mvt.version}</version>-->
-<!--      <classifier>lambda</classifier>-->
-<!--      <type>zip</type>-->
-<!--    </dependency>-->
-<!--    <dependency>-->
-<!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
-<!--      <artifactId>echofish-aws-zarr-accumulator-lambda</artifactId>-->
-<!--      <version>${za.version}</version>-->
-<!--      <classifier>lambda</classifier>-->
-<!--      <type>zip</type>-->
-<!--    </dependency>-->
+    <!--    <dependency>-->
+    <!--      <groupId>io.github.ci-cmg.echofish</groupId>-->
+    <!--      <artifactId>echofish-aws-mvt-lambda</artifactId>-->
+    <!--      <version>${mvt.version}</version>-->
+    <!--      <classifier>lambda</classifier>-->
+    <!--      <type>zip</type>-->
+    <!--    </dependency>-->
+    <!--    <dependency>-->
+    <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
+    <!--      <artifactId>echofish-aws-zarr-accumulator-lambda</artifactId>-->
+    <!--      <version>${za.version}</version>-->
+    <!--      <classifier>lambda</classifier>-->
+    <!--      <type>zip</type>-->
+    <!--    </dependency>-->
   </dependencies>
   <build>
     <extensions>
@@ -255,112 +263,112 @@ Instructions for adding or updating a new deployment resource:
         </executions>
       </plugin>
 
-<!--      <plugin>-->
-<!--        <groupId>org.apache.maven.plugins</groupId>-->
-<!--        <artifactId>maven-dependency-plugin</artifactId>-->
-<!--        <version>3.2.0</version>-->
-<!--        <executions>-->
-<!--          <execution>-->
-<!--            <id>copy-dependencies</id>-->
-<!--            <phase>package</phase>-->
-<!--            <goals>-->
-<!--              <goal>copy-dependencies</goal>-->
-<!--            </goals>-->
-<!--            <configuration>-->
-<!--              &lt;!&ndash; configure the plugin here &ndash;&gt;-->
-<!--              <excludeTransitive>-->
-<!--                true-->
-<!--              </excludeTransitive>-->
-<!--            </configuration>-->
-<!--          </execution>-->
-<!--        </executions>-->
-<!--      </plugin>-->
+      <!--      <plugin>-->
+      <!--        <groupId>org.apache.maven.plugins</groupId>-->
+      <!--        <artifactId>maven-dependency-plugin</artifactId>-->
+      <!--        <version>3.2.0</version>-->
+      <!--        <executions>-->
+      <!--          <execution>-->
+      <!--            <id>copy-dependencies</id>-->
+      <!--            <phase>package</phase>-->
+      <!--            <goals>-->
+      <!--              <goal>copy-dependencies</goal>-->
+      <!--            </goals>-->
+      <!--            <configuration>-->
+      <!--              &lt;!&ndash; configure the plugin here &ndash;&gt;-->
+      <!--              <excludeTransitive>-->
+      <!--                true-->
+      <!--              </excludeTransitive>-->
+      <!--            </configuration>-->
+      <!--          </execution>-->
+      <!--        </executions>-->
+      <!--      </plugin>-->
 
 
-<!--      <plugin>-->
-<!--        <groupId>org.codehaus.mojo</groupId>-->
-<!--        <artifactId>build-helper-maven-plugin</artifactId>-->
-<!--        <version>3.2.0</version>-->
-<!--        <executions>-->
-<!--          <execution>-->
-<!--            <id>is-snapshot</id>-->
-<!--            <phase>validate</phase>-->
-<!--            <goals>-->
-<!--              <goal>regex-properties</goal>-->
-<!--            </goals>-->
-<!--            <configuration>-->
-<!--              <regexPropertySettings>-->
-<!--                <regexPropertySetting>-->
-<!--                  <name>version.regex</name>-->
-<!--                  <value>${project.version}</value>-->
-<!--                  <regex>^\d+\.\d+\.\d+-SNAPSHOT$</regex>-->
-<!--                  <replacement>.*</replacement>-->
-<!--                  <failIfNoMatch>false</failIfNoMatch>-->
-<!--                </regexPropertySetting>-->
-<!--              </regexPropertySettings>-->
-<!--            </configuration>-->
-<!--          </execution>-->
-<!--        </executions>-->
-<!--      </plugin>-->
+      <!--      <plugin>-->
+      <!--        <groupId>org.codehaus.mojo</groupId>-->
+      <!--        <artifactId>build-helper-maven-plugin</artifactId>-->
+      <!--        <version>3.2.0</version>-->
+      <!--        <executions>-->
+      <!--          <execution>-->
+      <!--            <id>is-snapshot</id>-->
+      <!--            <phase>validate</phase>-->
+      <!--            <goals>-->
+      <!--              <goal>regex-properties</goal>-->
+      <!--            </goals>-->
+      <!--            <configuration>-->
+      <!--              <regexPropertySettings>-->
+      <!--                <regexPropertySetting>-->
+      <!--                  <name>version.regex</name>-->
+      <!--                  <value>${project.version}</value>-->
+      <!--                  <regex>^\d+\.\d+\.\d+-SNAPSHOT$</regex>-->
+      <!--                  <replacement>.*</replacement>-->
+      <!--                  <failIfNoMatch>false</failIfNoMatch>-->
+      <!--                </regexPropertySetting>-->
+      <!--              </regexPropertySettings>-->
+      <!--            </configuration>-->
+      <!--          </execution>-->
+      <!--        </executions>-->
+      <!--      </plugin>-->
 
-<!--      <plugin>-->
-<!--        <groupId>org.apache.maven.plugins</groupId>-->
-<!--        <artifactId>maven-enforcer-plugin</artifactId>-->
-<!--        <version>1.4.1</version>-->
-<!--        <executions>-->
-<!--          <execution>-->
-<!--            <id>enforce-no-snapshots</id>-->
-<!--            <phase>validate</phase>-->
-<!--            <goals>-->
-<!--              <goal>enforce</goal>-->
-<!--            </goals>-->
-<!--            <configuration>-->
-<!--              <rules>-->
-<!--                <requireReleaseDeps>-->
-<!--                  <onlyWhenRelease>true</onlyWhenRelease>-->
-<!--                </requireReleaseDeps>-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>zgeo.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>r2z.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>cr.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>za.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>ui.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>api.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>ds.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>cr.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <property>mvt.version</property>&ndash;&gt;-->
-<!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
-<!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
-<!--              </rules>-->
-<!--              <fail>true</fail>-->
-<!--            </configuration>-->
-<!--          </execution>-->
-<!--        </executions>-->
-<!--      </plugin>-->
+      <!--      <plugin>-->
+      <!--        <groupId>org.apache.maven.plugins</groupId>-->
+      <!--        <artifactId>maven-enforcer-plugin</artifactId>-->
+      <!--        <version>1.4.1</version>-->
+      <!--        <executions>-->
+      <!--          <execution>-->
+      <!--            <id>enforce-no-snapshots</id>-->
+      <!--            <phase>validate</phase>-->
+      <!--            <goals>-->
+      <!--              <goal>enforce</goal>-->
+      <!--            </goals>-->
+      <!--            <configuration>-->
+      <!--              <rules>-->
+      <!--                <requireReleaseDeps>-->
+      <!--                  <onlyWhenRelease>true</onlyWhenRelease>-->
+      <!--                </requireReleaseDeps>-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>zgeo.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>r2z.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>cr.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>za.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>ui.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>api.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>ds.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>cr.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                <requireProperty>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <property>mvt.version</property>&ndash;&gt;-->
+      <!--&lt;!&ndash;                  <regex>${version.regex}</regex>&ndash;&gt;-->
+      <!--&lt;!&ndash;                </requireProperty>&ndash;&gt;-->
+      <!--              </rules>-->
+      <!--              <fail>true</fail>-->
+      <!--            </configuration>-->
+      <!--          </execution>-->
+      <!--        </executions>-->
+      <!--      </plugin>-->
 
     </plugins>
   </build>
@@ -369,7 +377,7 @@ Instructions for adding or updating a new deployment resource:
     <profile>
       <id>release</id>
       <properties>
-        <dashTimestamp />
+        <dashTimestamp/>
       </properties>
     </profile>
   </profiles>

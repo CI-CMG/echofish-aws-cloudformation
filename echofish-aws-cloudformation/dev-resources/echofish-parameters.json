@@ -1,10 +1,22 @@
 [
   {
     "ParameterKey": "StackPrefix",
-    "ParameterValue": "@user.name@-dev-echofish"
+    "ParameterValue": "@user.name@-dev5-echofish"
   },
   {
     "ParameterKey": "RolePermissionsBoundary",
     "ParameterValue": "CIRES_Admin_PermissionBoundary"
+  },
+  {
+    "ParameterKey": "DevOutputBucketUserAlias",
+    "ParameterValue": "@user.name@-dev"
+  },
+  {
+    "ParameterKey": "OutputBucketUserAccessKeyPsName",
+    "ParameterValue": "@user.name@-dev-access-key"
+  },
+  {
+    "ParameterKey": "OutputBucketUserSecretAccessKeyPsName",
+    "ParameterValue": "@user.name@-dev-secret-access-key"
   }
 ]

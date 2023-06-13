@@ -102,7 +102,7 @@ Resources:
           Value: !Ref StackPrefix
       # Set to a little more than the maximum Lambda time
       VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-raw-to-zarr
+      QueueName: !Sub ${StackPrefix}-raw-to-zarr-ec2
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt RawToZarrDeadLetterQueue.Arn
         maxReceiveCount: 1

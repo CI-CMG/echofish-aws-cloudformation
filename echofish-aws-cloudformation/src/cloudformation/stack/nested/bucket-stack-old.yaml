@@ -1,0 +1,447 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Echofish Buckets
+
+Parameters:
+  StackPrefix:
+    Type: String
+  EnvironmentType:
+    Type: String
+  LambdaRolePermissionsBoundary:
+    Type: String
+  DeploymentBucketName:
+    Type: String
+  CustomResourceLambdaVersion:
+    Type: String
+
+Conditions:
+  IsProduction:
+    !Equals [!Ref EnvironmentType, prod]
+  IsDev:
+    !Equals [!Ref EnvironmentType, dev]
+  HasPermissionsBoundary:
+    Fn::Not:
+      - Fn::Equals:
+          - ""
+          - !Ref LambdaRolePermissionsBoundary
+
+Mappings:
+  BucketNameMap:
+    ZarrFileBucket:
+      Value: echofish-zarr-file
+    ZarrStoreBucket:
+      Value: echofish-zarr-store
+    GeoHashBucket:
+      Value: echofish-geohash
+    UiBucket:
+      Value: echofish-ui
+#    CruiseMvtBucket:
+#      Value: echofish-cruise-mvt
+    MvtBucket:
+      Value: echofish-mvt
+    MbTilesBucket:
+      Value: echofish-mbtiles
+
+Resources:
+
+#  DataSetBucket:
+#    Type: AWS::S3::Bucket
+
+
+  BucketDrainLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      PermissionsBoundary:
+        Fn::If:
+          - HasPermissionsBoundary
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${LambdaRolePermissionsBoundary}
+          - AWS::NoValue
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: Logging
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+        - PolicyName: S3Bucket
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                 - Fn::Sub:
+                     - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                     - Suffix: !FindInMap [BucketNameMap, ZarrFileBucket, Value]
+                 - Fn::Sub:
+                     - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                     - Suffix: !FindInMap [BucketNameMap, ZarrStoreBucket, Value]
+                 - Fn::Sub:
+                     - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                     - Suffix: !FindInMap [BucketNameMap, MvtBucket, Value]
+                 - Fn::Sub:
+                     - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                     - Suffix: !FindInMap [BucketNameMap, MbTilesBucket, Value]
+                 - Fn::Sub:
+                     - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                     - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
+                Action:
+                  - s3:DeleteObject
+              - Effect: Allow
+                Resource:
+                  - Fn::Sub:
+                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                      - Suffix: !FindInMap [BucketNameMap, ZarrFileBucket, Value]
+                  - Fn::Sub:
+                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                      - Suffix: !FindInMap [BucketNameMap, ZarrStoreBucket, Value]
+                  - Fn::Sub:
+                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                      - Suffix: !FindInMap [BucketNameMap, MvtBucket, Value]
+                  - Fn::Sub:
+                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                      - Suffix: !FindInMap [BucketNameMap, MbTilesBucket, Value]
+                  - Fn::Sub:
+                      - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                      - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
+                Action:
+                  - s3:ListBucket
+
+  BucketDrainLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Empty Bucket
+      Code:
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/echofish-aws-custom-resource-lambda-${CustomResourceLambdaVersion}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.resource.EmptyBucketLambda::handleRequest
+      Runtime: java11
+      MemorySize: 256
+      Timeout: 60
+      Role: !GetAtt BucketDrainLambdaRole.Arn
+
+
+  ############################### ZarrFileBucket ########################
+  ZarrFileBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [BucketNameMap, ZarrFileBucket, Value]
+
+  ZarrFileBucketDrain:
+    Type: Custom::ZarrFileBucketDrain
+    Properties:
+      ServiceToken: !GetAtt BucketDrainLambda.Arn
+      bucketName: !Ref ZarrFileBucket
+  #######################################################
+
+
+  ############################### ZarrStoreBucket ########################
+  ZarrStoreBucketProd:
+    Type: AWS::S3::Bucket
+    Condition: IsProduction
+    DeletionPolicy: Retain
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [BucketNameMap, ZarrStoreBucket, Value]
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+
+  ZarrStoreBucketDev:
+    Type: AWS::S3::Bucket
+    Condition: IsDev
+    DeletionPolicy: Delete
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [BucketNameMap, ZarrStoreBucket, Value]
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+
+  ZarrStoreBucketDrain:
+    Type: Custom::ZarrStoreBucketDrain
+    Condition: IsDev
+    Properties:
+      ServiceToken: !GetAtt BucketDrainLambda.Arn
+      bucketName: !Ref ZarrStoreBucketDev
+
+
+  ZarrStoreBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !If [ IsProduction, !Ref ZarrStoreBucketProd, !Ref ZarrStoreBucketDev ]
+      PolicyDocument:
+        Statement:
+          - Sid: AllowPublicRead,
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: s3:GetObject
+            Resource:
+              - Fn::Sub:
+                  - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                  - Suffix: !FindInMap [ BucketNameMap, ZarrStoreBucket, Value ]
+          - Sid: AllowPublicList,
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: s3:ListBucket
+            Resource:
+              - Fn::Sub:
+                  - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                  - Suffix: !FindInMap [ BucketNameMap, ZarrStoreBucket, Value ]
+
+  #######################################################
+
+  ############################### GeoHashBucket ########################
+  GeoHashBucketProd:
+    Type: AWS::S3::Bucket
+    Condition: IsProduction
+    DeletionPolicy: Retain
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+
+  GeoHashBucketDev:
+    Type: AWS::S3::Bucket
+    Condition: IsDev
+    DeletionPolicy: Delete
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+
+  GeoHashBucketDrain:
+    Type: Custom::GeoHashBucketDrain
+    Condition: IsDev
+    Properties:
+      ServiceToken: !GetAtt BucketDrainLambda.Arn
+      bucketName: !Ref GeoHashBucketDev
+
+  GeoHashBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !If [ IsProduction, !Ref GeoHashBucketProd, !Ref GeoHashBucketDev ]
+      PolicyDocument:
+        Statement:
+          - Sid: AllowPublicRead,
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: s3:GetObject
+            Resource:
+              - Fn::Sub:
+                  - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                  - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
+          - Sid: AllowPublicList,
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: s3:ListBucket
+            Resource:
+              - Fn::Sub:
+                  - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                  - Suffix: !FindInMap [ BucketNameMap, GeoHashBucket, Value ]
+  #######################################################
+
+
+  ############################### UiBucket ########################
+  UiBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [BucketNameMap, UiBucket, Value]
+  #######################################################
+
+  ############################### MvtBucket ########################
+  MvtBucketProd:
+    Type: AWS::S3::Bucket
+    Condition: IsProduction
+    DeletionPolicy: Retain
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [BucketNameMap, MvtBucket, Value]
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+
+  MvtBucketDev:
+    Type: AWS::S3::Bucket
+    Condition: IsDev
+    DeletionPolicy: Delete
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [BucketNameMap, MvtBucket, Value]
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - '*'
+            AllowedMethods:
+              - GET
+              - HEAD
+
+  MvtBucketDrain:
+    Type: Custom::MvtBucketDrain
+    Condition: IsDev
+    Properties:
+      ServiceToken: !GetAtt BucketDrainLambda.Arn
+      bucketName: !Ref MvtBucketDev
+
+  MvtBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !If [IsProduction, !Ref MvtBucketProd, !Ref MvtBucketDev]
+      PolicyDocument:
+        Statement:
+          - Sid: AllowPublicRead,
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: s3:GetObject
+            Resource:
+              - Fn::Sub:
+                    - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}/*
+                    - Suffix: !FindInMap [BucketNameMap, MvtBucket, Value]
+          - Sid: AllowPublicList,
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: s3:ListBucket
+            Resource:
+              - Fn::Sub:
+                  - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
+                  - Suffix: !FindInMap [BucketNameMap, MvtBucket, Value]
+  #######################################################
+
+
+  ############################### MbTilesBucket ########################
+  MbTilesBucketProd:
+    Type: AWS::S3::Bucket
+    Condition: IsProduction
+    DeletionPolicy: Retain
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [BucketNameMap, MbTilesBucket, Value]
+
+  MbTilesBucketDev:
+    Type: AWS::S3::Bucket
+    Condition: IsDev
+    DeletionPolicy: Delete
+    Properties:
+      BucketName:
+        Fn::Sub:
+          - ${StackPrefix}-${AWS::AccountId}-${Suffix}
+          - Suffix: !FindInMap [BucketNameMap, MbTilesBucket, Value]
+
+  MbTilesBucketDrain:
+    Type: Custom::MbTilesBucketDrain
+    Condition: IsDev
+    Properties:
+      ServiceToken: !GetAtt BucketDrainLambda.Arn
+      bucketName: !Ref MbTilesBucketDev
+  #######################################################
+
+
+
+Outputs:
+  UiBucketArn:
+    Value: !GetAtt UiBucket.Arn
+  UiBucketName:
+    Value: !Ref UiBucket
+  MvtBucketArn:
+    Value: !If [IsProduction, !GetAtt MvtBucketProd.Arn, !GetAtt MvtBucketDev.Arn]
+  MvtBucketName:
+    Value: !If [IsProduction, !Ref MvtBucketProd, !Ref MvtBucketDev]
+  MvtBucketBaseUrl:
+    Value:
+      Fn::If:
+        - IsProduction
+        - !Sub https://${MvtBucketProd.RegionalDomainName}
+        - !Sub https://${MvtBucketDev.RegionalDomainName}
+  MbTilesBucketArn:
+    Value: !If [IsProduction, !GetAtt MbTilesBucketProd.Arn, !GetAtt MbTilesBucketDev.Arn]
+  MbTilesBucketName:
+    Value: !If [IsProduction, !Ref MbTilesBucketProd, !Ref MbTilesBucketDev]
+  ZarrStoreBucketArn:
+    Value: !If [IsProduction, !GetAtt ZarrStoreBucketProd.Arn, !GetAtt ZarrStoreBucketDev.Arn]
+  ZarrStoreBucketName:
+    Value: !If [IsProduction, !Ref ZarrStoreBucketProd, !Ref ZarrStoreBucketDev]
+  ZarrStoreBucketBaseUrl:
+    Value:
+      Fn::If:
+        - IsProduction
+        - !Sub https://${ZarrStoreBucketProd.RegionalDomainName}
+        - !Sub https://${ZarrStoreBucketDev.RegionalDomainName}
+  ZarrFileBucketArn:
+    Value: !GetAtt ZarrFileBucket.Arn
+  ZarrFileBucketName:
+    Value: !Ref ZarrFileBucket
+  GeoHashBucketArn:
+    Value: !If [ IsProduction, !GetAtt GeoHashBucketProd.Arn, !GetAtt GeoHashBucketDev.Arn ]
+  GeoHashBucketName:
+    Value: !If [ IsProduction, !Ref GeoHashBucketProd, !Ref GeoHashBucketDev ]
+  GeoHashBucketBaseUrl:
+    Value:
+      Fn::If:
+        - IsProduction
+        - !Sub https://${GeoHashBucketProd.RegionalDomainName}
+        - !Sub https://${GeoHashBucketDev.RegionalDomainName}
+
+

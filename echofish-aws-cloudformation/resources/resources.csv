@@ -1,2 +1,3 @@
 id,group,artifact,version,timestamp,classifier,extension,directory
 CruiseSplitterLambda,io.github.ci-cmg.echofish,echofish-aws-cruise-splitter-lambda,@CruiseSplitterLambda.version@,@dashTimestamp@,lambda,zip,lambda
+BucketDrainLambda,io.github.ci-cmg.aws,aws-cf-custom-resource-bucket-drain,@BucketDrainLambda.version@,@dashTimestamp@,lambda,zip,lambda
