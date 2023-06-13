@@ -1,11 +1,11 @@
 [
   {
     "ParameterKey": "StackPrefix",
-    "ParameterValue": "@user.name@-dev5-echofish"
+    "ParameterValue": "@user.name@-dev-echofish"
   },
   {
     "ParameterKey": "DeploymentBucketName",
-    "ParameterValue": "@user.name@-dev5-echofish-deploy"
+    "ParameterValue": "@user.name@-dev-echofish-deploy"
   },
   {
     "ParameterKey": "EnvironmentType",

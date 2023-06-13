@@ -1,7 +1,7 @@
 [
   {
     "ParameterKey": "StackPrefix",
-    "ParameterValue": "@user.name@-dev5-echofish"
+    "ParameterValue": "@user.name@-dev-echofish"
   },
   {
     "ParameterKey": "RolePermissionsBoundary",
