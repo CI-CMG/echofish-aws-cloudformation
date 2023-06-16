@@ -202,6 +202,7 @@ def interpolate_data(
         end_ping_time_index: int,
 ) -> np.ndarray:
     minimum_resolution = np.nanmin(np.float32(df['MIN_ECHO_RANGE']))
+    maximum_cruise_depth_meters = np.max(np.float32(df['MAX_ECHO_RANGE']))
     frequencies = cruise_zarr.frequency[:]
     all_Sv = file_zarr.Sv.values  # read remotely once to speed up
     all_echo_range = file_zarr.echo_range.values
@@ -210,33 +211,42 @@ def interpolate_data(
     for freq in range(len(frequencies)):
         for ping_time in range(end_ping_time_index - start_ping_time_index):  # 696120
             # print(f'{ping_time} of start: {start_ping_time_index} to end: {end_ping_time_index} for freq: {freq}')
-            current_max_depth_meters = np.nanmax(all_echo_range[freq, ping_time, :])  # 249.79 meters
+            # ping_times 0, 100, 400
+            #min_echo_range = float(np.nanmin(ds_Sv.echo_range.values[np.nonzero(ds_Sv.echo_range.values)]))
+            maximum_file_depth_meters = np.nanmax(all_echo_range[freq, ping_time, :])  # 249.79 meters
             y = all_Sv[freq, ping_time, :] # local copy
             ###
-            x = np.linspace(
+            x = all_echo_range[freq, ping_time, :]
+            y = y[~np.isnan(x)]
+            x = x[~np.isnan(x)]
+            ###
+            #
+            x=np.linspace(start=0, stop=cruise_maximum_depth, num)
+            x = np.linspace(  # Return evenly spaced numbers over a specified interval.
                 start=0,
-                stop=np.ceil(current_max_depth_meters),
+                stop=np.ceil(maximum_file_depth_meters), # 249.79 --> 250 meters
                 num=len(y),
                 endpoint=True
             )
+            #
             ###
             # x: A 1-D array of real values.
             # y: A N-D array of real values. The length of y along the interpolation axis must be equal to the length of x.
             f = interpolate.interp1d(  # Interpolate a 1-D function.
-                x=x,
-                y=y,
+                x=x, # array-like
+                y=y, # the len of y along the interpolation axis must be equal to length of y
                 kind='previous'
             )
             ###
             x_new = np.linspace(
-                start=0, #minimum_resolution,
-                stop=x[-1],
-                num=int(np.ceil(current_max_depth_meters / minimum_resolution)) + 1,
+                start=0, # 0 meters, minimum_resolution,
+                stop=x[-1], # 250 meters
+                num=int(np.ceil(maximum_file_depth_meters / minimum_resolution)) + 1, # 1302 samples
                 endpoint=True
             )
             ###
             y_new = f(x_new)  # TODO: too small by one? --> 1301
-            y_new_height = y_new.shape[0]
+            y_new_height = y_new.shape[0] # 1302 samples
             # Note: dimensions are (depth, time, frequency)
             all_Sv_prototype[:y_new_height, ping_time, freq] = y_new # (5208, 89911, 4)
     #
@@ -264,19 +274,20 @@ def interpolate_data(
 
 
 #input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T210709.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T033431.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T061745.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T100505.zarr'
 
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T124906.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T171804.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T201647.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T202050.zarr'
-input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T231759.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T210709.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T033431.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T061745.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T100505.zarr'
+
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T124906.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T171804.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T201647.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T202050.zarr'
+#input_zarr_path = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T231759.zarr'
 
 
 def main(
@@ -286,6 +297,8 @@ def main(
     cruise_name: str = 'HB0707',
     sensor_name: str = 'EK60',
     input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.zarr',
+    # input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
+    # input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.zarr'
     # zarr_synchronizer: Union[str, None] = None,
 ) -> None:
     """This Lambda runs once per file-level Zarr store. It begins by

@@ -565,6 +565,8 @@ def main(
         sensor_name: str='EK60',
         input_bucket: str="noaa-wcsd-pds",
         output_bucket: str="noaa-wcsd-zarr-pds",
+        #input_file: str="D20070711-T182032.raw"
+        #input_file: str="D20070712-T152416.raw"
         input_file: str="D20070711-T182032.raw",  # TODO: integrate this...
 ) -> None:
     """This Lambda reads a raw Echosounder file from a s3 location. Calibrates
@@ -598,7 +600,7 @@ def main(
     """
     #################################################################
     # AWS Lambda requires writes only in /tmp directory
-    os.chdir(TEMPDIR)
+    os.chdir(TEMPDIR) # TODO: PUT BACK
     print(os.getcwd())
     #################################################################
     # reading from public bucket right now
@@ -616,6 +618,8 @@ def main(
         sensor_name=sensor_name
     )
     #################################################################
+    #raw_file = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.raw'
+    #raw_file = 'data/raw/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.raw'
     for raw_file in raw_files:
         print(f"Processing raw_file: {raw_file}")
         row_split = raw_file.split(os.sep)
