@@ -9,138 +9,48 @@ Parameters:
 Resources:
 
 
-  ##### Queues #####
-
-  RawToZarrDeadLetterQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-raw-to-zarr-dlq
-
-  ResampleDeadLetterQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-resample-dlq
-
-  CruiseSplitterDeadLetterQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-cruise-splitter-dlq
-
-  IndexLambdaQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-index
-#      RedrivePolicy:
-#        deadLetterTargetArn: !GetAtt DeadLetterQueue.Arn
-#        maxReceiveCount: 1
-
-  CruiseSplitterLambdaQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-cruise-splitter
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt CruiseSplitterDeadLetterQueue.Arn
-        maxReceiveCount: 1
-
-  RawToZarrLambdaQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-raw-to-zarr
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt RawToZarrDeadLetterQueue.Arn
-        maxReceiveCount: 1
-
-  RawToZarrEc2Queue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-raw-to-zarr-ec2
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt RawToZarrDeadLetterQueue.Arn
-        maxReceiveCount: 1
-
-  ResampleAndWriteToZarrStoreLambdaQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-resample-zarr
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt ResampleDeadLetterQueue.Arn
-        maxReceiveCount: 1
-
-
-  CreateEmptyZarrStoreLambdaQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      # Set to a little more than the maximum Lambda time
-      VisibilityTimeout: 1200
-      QueueName: !Sub ${StackPrefix}-zarr-init
-      RedrivePolicy:
-        deadLetterTargetArn: !GetAtt ResampleDeadLetterQueue.Arn
-        maxReceiveCount: 1
-
-
-  ##### Queues #####
   ##### Topics #####
+
+  IndexDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-index-dlq
+
+  CruiseSplitterDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-cruise-splitter-dlq
+
+  RawToZarrDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-raw-to-zarr-dlq
+
+  ResampleDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-resample-dlq
+
 
   IndexLambdaTopic:
     Type: AWS::SNS::Topic
@@ -160,65 +70,49 @@ Resources:
           Value: EchoFish
         - Key: StackPrefix
           Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-cruise-splitter-done
+      TopicName: !Sub ${StackPrefix}-cruise-splitter
+
+  RawToZarrLambdaTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-raw-to-zarr
+
+  ZarrInitializerLambdaTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-zarr-init
 
 
   ##### Topics #####
-  ##### Wiring Topics To Queues #####
 
-
-  IndexLambdaTopicToIndexLambdaQueue:
-    Type: AWS::SNS::Subscription
-    Properties:
-      Protocol: sqs
-      TopicArn: !Ref IndexLambdaTopic
-      Endpoint: !GetAtt IndexLambdaQueue.Arn
-      RawMessageDelivery: true
-
-  IndexLambdaTopicToIndexLambdaQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref IndexLambdaQueue
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Sid: PublishToTopic
-            Resource: !GetAtt IndexLambdaQueue.Arn
-            Effect: Allow
-            Principal:
-              Service:
-                - sns.amazonaws.com
-            Action:
-              - sqs:SendMessage
-            Condition:
-              ArnEquals:
-                aws:SourceArn: !Ref IndexLambdaTopic
-
-
-  ##### Wiring Topics To Queues #####
 
 Outputs:
   IndexLambdaTopicArn:
     Value: !Ref IndexLambdaTopic
-  IndexLambdaQueueArn:
-    Value: !GetAtt IndexLambdaQueue.Arn
-  RawToZarrLambdaQueueArn:
-    Value: !GetAtt RawToZarrLambdaQueue.Arn
-  ResampleAndWriteToZarrStoreLambdaQueueArn:
-    Value: !GetAtt ResampleAndWriteToZarrStoreLambdaQueue.Arn
-  CreateEmptyZarrStoreLambdaQueueArn:
-    Value: !GetAtt CreateEmptyZarrStoreLambdaQueue.Arn
-  RawToZarrDeadLetterQueueArn:
-    Value: !GetAtt RawToZarrDeadLetterQueue.Arn
-  CruiseSplitterDeadLetterQueueArn:
-    Value: !GetAtt CruiseSplitterDeadLetterQueue.Arn
-  ResampleDeadLetterQueueArn:
-    Value: !GetAtt ResampleDeadLetterQueue.Arn
+  IndexDeadLetterTopicArn:
+    Value: !Ref IndexDeadLetterTopic
+  CruiseSplitterDeadLetterTopicArn:
+    Value: !Ref CruiseSplitterDeadLetterTopic
+  RawToZarrDeadLetterTopicArn:
+    Value: !Ref RawToZarrDeadLetterTopic
+  ResampleDeadLetterTopicArn:
+    Value: !Ref ResampleDeadLetterTopic
   CruiseSplitterLambdaTopicArn:
     Value: !Ref CruiseSplitterLambdaTopic
-  CruiseSplitterLambdaQueueArn:
-    Value: !GetAtt CruiseSplitterLambdaQueue.Arn
+  RawToZarrLambdaTopicArn:
+    Value: !Ref RawToZarrLambdaTopic
+  ZarrInitializerLambdaTopicArn:
+    Value: !Ref ZarrInitializerLambdaTopic
 
 
 

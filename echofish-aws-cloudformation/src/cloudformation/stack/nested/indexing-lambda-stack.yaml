@@ -25,7 +25,9 @@ Parameters:
     Type: String
   CalibrationFileKey:
     Type: String
-  IndexLambdaQueueArn:
+  IndexLambdaTopicArn:
+    Type: String
+  DeadLetterTopicArn:
     Type: String
 
 Conditions:
@@ -65,17 +67,6 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-        - PolicyName: SQS
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Resource: !Ref IndexLambdaQueueArn
-                Action:
-                  - sqs:ReceiveMessage
-                  - sqs:DeleteMessage
-                  - sqs:GetQueueAttributes
-                  - sqs:ChangeMessageVisibility
         - PolicyName: S3
           PolicyDocument:
             Version: 2012-10-17
@@ -110,6 +101,15 @@ Resources:
                   - dynamodb:Query
                   - dynamodb:Scan
                   - dynamodb:DeleteItem
+        - PolicyName: SNS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Ref DeadLetterTopicArn
+                Action:
+                  - sns:Publish
 
 
   Lambda:
@@ -129,20 +129,78 @@ Resources:
           CALIBRATION_KEY: !Ref CalibrationFileKey
 
 
-  Trigger:
-    Type: AWS::Lambda::EventSourceMapping
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
     Properties:
-      BatchSize: 1
-      Enabled: true
-      EventSourceArn: !Ref IndexLambdaQueueArn
       FunctionName: !Ref Lambda
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref IndexLambdaTopicArn
+
+  LambdaSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt Lambda.Arn
+      TopicArn: !Ref IndexLambdaTopicArn
 
 
-  EC2LogGroup:
+  LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${Lambda}
       RetentionInDays: !Ref LogRetentionInDays
+
+  LambdaEvent:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref Lambda
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0
+      DestinationConfig:
+        OnFailure:
+          Destination: !Ref DeadLetterTopicArn
+
+  TopicSubscribePolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref IndexLambdaTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: SubscribeToTopic
+            Resource: !Ref IndexLambdaTopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Subscribe
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt Lambda.Arn
+
+  TopicDlqPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref DeadLetterTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublishToTopic
+            Effect: Allow
+            Resource: !Ref DeadLetterTopicArn
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Publish
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt Lambda.Arn
 
 
 Outputs:

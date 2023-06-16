@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Triggers Events For Files Per Cruise
+Description: Error Handler for Raw To Zarr
 
 Parameters:
   DeploymentBucketName:
@@ -12,17 +12,9 @@ Parameters:
     Type: Number
   MemorySize:
     Type: Number
-  InputBucketName:
-    Type: String
-  InputBucketRegion:
-    Type: String
   LogRetentionInDays:
     Type: Number
-  DeadLetterTopicArn:
-    Type: String
   Version:
-    Type: String
-  DoneTopicArn:
     Type: String
   FileInfoTableArn:
     Type: String
@@ -69,14 +61,6 @@ Resources:
                   - logs:CreateLogGroup
                   - logs:CreateLogStream
                   - logs:PutLogEvents
-        - PolicyName: S3
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Resource: !Sub arn:${AWS::Partition}:s3:::${InputBucketName}
-                Action:
-                  - s3:ListBucket
         - PolicyName: DynamoDB
           PolicyDocument:
             Version: 2012-10-17
@@ -91,24 +75,24 @@ Resources:
                   - dynamodb:Query
                   - dynamodb:Scan
                   - dynamodb:DeleteItem
-        - PolicyName: SNS
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Resource:
-                  - !Ref DeadLetterTopicArn
-                  - !Ref DoneTopicArn
-                Action:
-                  - sns:Publish
+#        - PolicyName: SNS
+#          PolicyDocument:
+#            Version: 2012-10-17
+#            Statement:
+#              - Effect: Allow
+#                Resource:
+#                  - !Ref DeadLetterTopicArn
+#                  - !Ref DoneTopicArn
+#                Action:
+#                  - sns:Publish
 
   Lambda:
     Type: AWS::Lambda::Function
     Properties:
       Code:
         S3Bucket: !Ref DeploymentBucketName
-        S3Key: !Sub lambda/echofish-aws-cruise-splitter-lambda-${Version}-lambda.zip
-      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.cruisesplit.CruiseSplitterLambda::handleRequest
+        S3Key: !Sub lambda/echofish-aws-raw-to-zarr-error-handler-${Version}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.r2zerror.RawToZarrErrorHandlerLambda::handleRequest
       Runtime: java11
       MemorySize: !Ref MemorySize
       Timeout: !Ref Timeout
@@ -116,11 +100,8 @@ Resources:
       Role: !GetAtt Role.Arn
       Environment:
         Variables:
-          INPUT_BUCKET: !Ref InputBucketName
-          TOPIC_ARN: !Ref DoneTopicArn
           TABLE_NAME: !Ref FileInfoTableName
           LOG_LEVEL: info
-          BUCKET_REGION: !Ref InputBucketRegion
 
   LambdaPermission:
     Type: AWS::Lambda::Permission
@@ -149,9 +130,6 @@ Resources:
       FunctionName: !Ref Lambda
       Qualifier: $LATEST
       MaximumRetryAttempts: 0
-      DestinationConfig:
-        OnFailure:
-          Destination: !Ref DeadLetterTopicArn
 
   TopicSubscribePolicy:
     Type: AWS::SNS::TopicPolicy
@@ -172,48 +150,6 @@ Resources:
             Condition:
               ArnEquals:
                 aws:SourceArn: !GetAtt Lambda.Arn
-
-  TopicPublishPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties:
-      Topics:
-        - !Ref DoneTopicArn
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Sid: PublishToTopic
-            Effect: Allow
-            Resource: !Ref DoneTopicArn
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sns:Publish
-            Condition:
-              ArnEquals:
-                aws:SourceArn:
-                  - !GetAtt Lambda.Arn
-
-  TopicDlqPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties:
-      Topics:
-        - !Ref DeadLetterTopicArn
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Sid: PublishToTopic
-            Effect: Allow
-            Resource: !Ref DeadLetterTopicArn
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sns:Publish
-            Condition:
-              ArnEquals:
-                aws:SourceArn:
-                  - !GetAtt Lambda.Arn
 
 
 Outputs:

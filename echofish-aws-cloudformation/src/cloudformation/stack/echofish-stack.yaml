@@ -12,6 +12,9 @@ Parameters:
   RawSourceBucket:
     Type: String
     Default: noaa-wcsd-pds
+  RawSourceBucketRegion:
+    Type: String
+    Default: us-east-1
   # noaa-wcsd-zarr-pds
   OutputBucketName:
     Type: String
@@ -119,6 +122,21 @@ Parameters:
     MinValue: 1
     Default: 3
 
+  RawToZarrErrorLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 1024
+  RawToZarrErrorLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 240
+  RawToZarrErrorLambdaConcurrency:
+    Type: Number
+    MinValue: 1
+    Default: 3
+
 Conditions:
   CruiseSplitterLambdaIsRelease:
     Fn::Equals:
@@ -128,6 +146,14 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @CruiseSplitterLambda.version@
+  RawToZarrErrorLambdaIsRelease:
+    Fn::Equals:
+      - @RawToZarrErrorLambda.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @RawToZarrErrorLambda.version@
   BucketDrainLambdaIsRelease:
     Fn::Equals:
       - @BucketDrainLambda.version@
@@ -200,10 +226,14 @@ Resources:
         RawSourceBucket: !Ref RawSourceBucket
         CalibrationBucket: !Ref CalibrationBucket
         CalibrationFileKey: !Ref CalibrationFileKey
-        IndexLambdaQueueArn:
+        IndexLambdaTopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.IndexLambdaQueueArn
+            - Outputs.IndexLambdaTopicArn
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.IndexDeadLetterTopicArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/indexing-lambda-stack.yaml
@@ -221,16 +251,17 @@ Resources:
         Timeout: !Ref CruiseSplitterLambdaTimeout
         MemorySize: !Ref CruiseSplitterLambdaMemorySize
         InputBucketName: !Ref RawSourceBucket
+        InputBucketRegion: !Ref RawSourceBucketRegion
         LogRetentionInDays: !Ref LogRetentionInDays
-#        DeadLetterTopicArn:
-#          Fn::GetAtt:
-#            - MessagingStack
-#            - Outputs.CruiseSplitterDeadLetterQueueArn
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.CruiseSplitterDeadLetterTopicArn
         Version: !If [CruiseSplitterLambdaIsRelease, @CruiseSplitterLambda.version@, @CruiseSplitterLambda.version@@dashTimestamp@]
         DoneTopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.CruiseSplitterLambdaTopicArn
+            - Outputs.RawToZarrLambdaTopicArn
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
@@ -239,13 +270,43 @@ Resources:
           Fn::GetAtt:
             - DynamoDbStack
             - Outputs.FileInfoTableName
-        QueueArn:
+        TopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.CruiseSplitterLambdaQueueArn
+            - Outputs.CruiseSplitterLambdaTopicArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/cruise-splitter-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  RawToZarrErrorLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        PermissionsBoundary: !Ref RolePermissionsBoundary
+        MaxConcurrency: !Ref RawToZarrErrorLambdaConcurrency
+        Timeout: !Ref RawToZarrErrorLambdaTimeout
+        MemorySize: !Ref RawToZarrErrorLambdaMemorySize
+        LogRetentionInDays: !Ref LogRetentionInDays
+        Version: !If [ RawToZarrErrorLambdaIsRelease, @RawToZarrErrorLambda.version@, @RawToZarrErrorLambda.version@@dashTimestamp@ ]
+        FileInfoTableArn:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableArn
+        FileInfoTableName:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableName
+        TopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.CruiseSplitterDeadLetterTopicArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-error-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
@@ -271,12 +332,20 @@ Resources:
           Fn::GetAtt:
             - BucketStack
             - Outputs.OutputBucketName
-        RawToZarrLambdaQueueArn:
+        RawToZarrLambdaTopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.RawToZarrLambdaQueueArn
+            - Outputs.RawToZarrLambdaTopicArn
         OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
         OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.RawToZarrDeadLetterTopicArn
+        DoneTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.ZarrInitializerLambdaTopicArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-lambda-stack.yaml
