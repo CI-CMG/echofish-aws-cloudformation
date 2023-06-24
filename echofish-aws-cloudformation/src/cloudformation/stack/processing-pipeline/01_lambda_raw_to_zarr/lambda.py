@@ -497,13 +497,17 @@ def get_gps_data(
     assert(
         'time1' in echodata.platform.variables and 'time1' in echodata.environment.variables
     ), "Problem: Time coordinate not found in echodata."
+    # 'nmea_times' are times from the nmea datalogger associated with GPS
     nmea_times = echodata.platform.time1.values  # len(nmea_times) == 14691
+    # 'time1' are times from the echosounder associated with transducer measurement
     time1 = echodata.environment.time1.values  # len(sv_times) == 9776
     # Align 'sv_times' to 'nmea_times'
     assert(
         np.all(time1[:-1] <= time1[1:]) and np.all(nmea_times[:-1] <= nmea_times[1:])
     ), "Problem: NMEA time stamps are not sorted."
-    indices = nmea_times.searchsorted(time1, side="right") - 1
+    # find the indices where 'v' can be inserted into 'a'
+    indices = np.searchsorted(a=nmea_times, v=time1, side="right") - 1
+    #
     lat = latitude[indices]
     lat[indices < 0] = np.nan  # values recorded before indexing are set to nan
     lon = longitude[indices]

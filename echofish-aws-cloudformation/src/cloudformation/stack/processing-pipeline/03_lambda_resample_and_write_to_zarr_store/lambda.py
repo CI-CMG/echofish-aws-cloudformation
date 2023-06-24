@@ -165,11 +165,30 @@ def s3_zarr_as_xr(s3_zarr_store_path: str) -> xr.core.dataset.Dataset:
         key=os.getenv('ACCESS_KEY_ID'),  # optional parameter
         secret=os.getenv('SECRET_ACCESS_KEY'),
     )
-    store = s3fs.S3Map(root=s3_zarr_store_path, s3=s3_fs, check=False)
+    store = s3fs.S3Map(root=s3_zarr_store_path, s3=s3_fs, check=True)
     # You are already using dask, this is assumed by open_zarr, not the same as open_dataset(engine=“zarr”)
-    return xr.open_zarr(store=store, consolidated=True) # synchronizer=SYNCHRONIZER
+    import fsspec
 
-# TODO: will need to input just the zarr store name,
+    return xr.open_zarr(store=store, consolidated=None) # synchronizer=SYNCHRONIZER
+
+def read_s3_geo_json(
+        s3_geo_json_path: str,
+        access_key_id: str = None,
+        secret_access_key: str = None,
+) -> str:
+    # reads geojson file from s3 bucket w boto3
+    session = boto3.Session()
+    s3 = boto3.resource(
+        service_name='s3',
+        aws_access_key_id=access_key_id,
+        aws_secret_access_key=secret_access_key,
+    )
+    # s3_geo_json_path=f's3://{input_zarr_bucket}/{input_zarr_path}/geo.json'
+    content_object = s3.Object(input_zarr_bucket, f'{input_zarr_path}/geo.json')
+    file_content = content_object.get()['Body'].read().decode('utf-8')
+    json_content = json.loads(file_content)
+    return json_content
+
 
 
 def s3_zarr(
@@ -195,62 +214,47 @@ def s3_zarr(
 
 
 def interpolate_data(
-        df: pd.DataFrame,
-        file_zarr: xr.Dataset,
+        minimum_resolution: float,  # get from df
+        maximum_cruise_depth_meters: float,  # get from df
+        file_xr: xr.Dataset,  # need to figure out which time values are removed
         cruise_zarr: zarr.Group,
         start_ping_time_index: int,
         end_ping_time_index: int,
+        indices: np.ndarray, # the file_xr ping_time and Sv indices that are not np.nan
 ) -> np.ndarray:
-    minimum_resolution = np.nanmin(np.float32(df['MIN_ECHO_RANGE']))
-    maximum_cruise_depth_meters = np.max(np.float32(df['MAX_ECHO_RANGE']))
-    frequencies = cruise_zarr.frequency[:]
-    all_Sv = file_zarr.Sv.values  # read remotely once to speed up
-    all_echo_range = file_zarr.echo_range.values
-    all_Sv_prototype = np.empty(shape=cruise_zarr.sv[:, start_ping_time_index:end_ping_time_index, :].shape)
-    all_Sv_prototype[:, :, :] = np.nan
-    for freq in range(len(frequencies)):
-        for ping_time in range(end_ping_time_index - start_ping_time_index):  # 696120
-            # print(f'{ping_time} of start: {start_ping_time_index} to end: {end_ping_time_index} for freq: {freq}')
-            # ping_times 0, 100, 400
-            #min_echo_range = float(np.nanmin(ds_Sv.echo_range.values[np.nonzero(ds_Sv.echo_range.values)]))
-            maximum_file_depth_meters = np.nanmax(all_echo_range[freq, ping_time, :])  # 249.79 meters
-            y = all_Sv[freq, ping_time, :] # local copy
-            ###
-            x = all_echo_range[freq, ping_time, :]
-            y = y[~np.isnan(x)]
-            x = x[~np.isnan(x)]
-            ###
-            #
-            x=np.linspace(start=0, stop=cruise_maximum_depth, num)
-            x = np.linspace(  # Return evenly spaced numbers over a specified interval.
-                start=0,
-                stop=np.ceil(maximum_file_depth_meters), # 249.79 --> 250 meters
-                num=len(y),
-                endpoint=True
-            )
-            #
-            ###
-            # x: A 1-D array of real values.
-            # y: A N-D array of real values. The length of y along the interpolation axis must be equal to the length of x.
-            f = interpolate.interp1d(  # Interpolate a 1-D function.
-                x=x, # array-like
-                y=y, # the len of y along the interpolation axis must be equal to length of y
-                kind='previous'
-            )
-            ###
-            x_new = np.linspace(
-                start=0, # 0 meters, minimum_resolution,
-                stop=x[-1], # 250 meters
-                num=int(np.ceil(maximum_file_depth_meters / minimum_resolution)) + 1, # 1302 samples
-                endpoint=True
-            )
-            ###
-            y_new = f(x_new)  # TODO: too small by one? --> 1301
-            y_new_height = y_new.shape[0] # 1302 samples
-            # Note: dimensions are (depth, time, frequency)
-            all_Sv_prototype[:y_new_height, ping_time, freq] = y_new # (5208, 89911, 4)
+    # Note: file_zarr dimensions are (frequency, time, depth)
+    # read remotely once to speed up
+    frequencies = file_xr.channel.shape[0]
+    file_sv = file_xr.Sv.values  # (4, 9779, 1302)
+    all_file_depth_values = file_xr.echo_range.values[:, :, :]  # TODO
+    # Note: cruise_zarr dimensions are (depth, time, frequency)
+    cruise_sv_subset = np.empty(shape=cruise_zarr.sv[:, start_ping_time_index:end_ping_time_index, :].shape)
+    cruise_sv_subset[:, :, :] = np.nan # (5208, 9778, 4)
+    # grid evenly spaced depths over the specified interval
+    all_cruise_depth_values = np.linspace(
+        start=0,
+        stop=maximum_cruise_depth_meters,
+        num=int(maximum_cruise_depth_meters / minimum_resolution) + 1,
+        endpoint=True
+    )  # 5208
     #
-    return all_Sv_prototype
+    for iii in range(frequencies):
+        for jjj in range(len(indices)):
+            y = file_sv[iii, indices[jjj], :]  # y.shape = (4, 4871, 5208) -> frequency, time, depth
+            # all_Sv is inly 1302 depth measurements
+            f = interpolate.interp1d(  # Interpolate a 1-D function.
+                x=all_file_depth_values[iii, indices[jjj], :],
+                y=y,  # Need to strip off unwanted timestamps
+                kind='nearest',
+                # axis=0,
+                bounds_error=False,
+                fill_value=np.nan
+            )
+            y_new = f(all_cruise_depth_values)  # y_new.shape = (4, 4871, 5208) --> (frequency, time, depth)
+            # Note: dimensions are (depth, time, frequency)
+            cruise_sv_subset[:, jjj, iii] = y_new #.transpose((2, 1, 0))  # (5208, 89911, 4)
+    #
+    return cruise_sv_subset
 
 
 # Based off of: https://github.com/oftfrfbf/watercolumn/blob/master/scripts/zarr_upsample.py
@@ -357,9 +361,24 @@ def main(
     #
     #################################################################
     # [1] read file-level Zarr store using xarray
-    file_zarr = s3_zarr_as_xr(
+    file_xr = s3_zarr_as_xr(
         s3_zarr_store_path=f's3://{input_zarr_bucket}/{input_zarr_path}'
     )
+    geo_json = read_s3_geo_json(
+        s3_geo_json_path=f's3://{input_zarr_bucket}/{input_zarr_path}/geo.json',
+        access_key_id=os.getenv('ACCESS_KEY_ID'),
+        secret_access_key=os.getenv('SECRET_ACCESS_KEY'),
+    )
+    #geo_json['features'][0]
+    # {'id': '2007-07-12T15:24:16.032000000', 'type': 'Feature', 'properties': {'latitude': None, 'longitude': None}, 'geometry': None}
+    # reads GeoJSON with the id as the index
+    geospatial = geopandas.GeoDataFrame.from_features(geo_json['features']).set_index(pd.json_normalize(geo_json["features"])["id"].values)
+    geospatial_index = geospatial.dropna().index.values.astype('datetime64[ns]')
+    # find the indices where 'v' can be inserted into 'a'
+    indices = np.searchsorted(a=file_xr.ping_time.values, v=geospatial_index)
+    #
+    # TODO: only need to read the geojson file once instead of twice here...
+    #
     #########################################################################
     #########################################################################
     # [2] open cruise level zarr store for writing
@@ -381,7 +400,7 @@ def main(
         values=0
     )
     start_ping_time_index = ping_time_cumsum[index]
-    end_ping_time_index = ping_time_cumsum[index+1]
+    end_ping_time_index = ping_time_cumsum[index + 1]
     #
     #########################################################################
     # [4] extract gps and time coordinate from file-level Zarr store,
@@ -398,18 +417,26 @@ def main(
     cruise_zarr.longitude[start_ping_time_index:end_ping_time_index] = longitude
     #########################################################################
     # [6] get interpolated Sv data
+    filename = os.path.basename(input_zarr_path)
     all_Sv_prototype = interpolate_data(
-        df=df,
-        file_zarr=file_zarr,
+        minimum_resolution = np.nanmin(np.float32(df['MIN_ECHO_RANGE'])),
+        maximum_cruise_depth_meters = np.max(np.float32(df['MAX_ECHO_RANGE'])),
+        # num_ping_time_dropna = int(df.iloc[index]['NUM_PING_TIME_DROPNA']),
+        file_xr=file_xr,
         cruise_zarr=cruise_zarr,
         start_ping_time_index=start_ping_time_index,
         end_ping_time_index=end_ping_time_index,
-    )
+        indices=indices,
+    )  # TODO:
     cruise_zarr.sv[:, start_ping_time_index:end_ping_time_index, :] = all_Sv_prototype
+    #
+    #np.nanmean(cruise_zarr.sv[:, start_ping_time_index:end_ping_time_index, :])
+    #
+
     #
     cruise_zarr.sv.info
     print('done')
-    # logger.info("Finishing lambda.")
+# logger.info("Finishing lambda.")
     # TODO: Work on synchronizing the data as written
 
 
