@@ -222,8 +222,9 @@ def interpolate_data(
         end_ping_time_index: int,
         indices: np.ndarray, # the file_xr ping_time and Sv indices that are not np.nan
 ) -> np.ndarray:
-    # Note: file_zarr dimensions are (frequency, time, depth)
     # read remotely once to speed up
+    #
+    # Note: file_zarr dimensions are (frequency, time, depth)
     frequencies = file_xr.channel.shape[0]
     file_sv = file_xr.Sv.values  # (4, 9779, 1302)
     all_file_depth_values = file_xr.echo_range.values[:, :, :]  # TODO
