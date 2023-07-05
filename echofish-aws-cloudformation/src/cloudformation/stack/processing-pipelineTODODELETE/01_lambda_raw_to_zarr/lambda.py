@@ -15,7 +15,11 @@ from botocore.config import Config
 from botocore.exceptions import ClientError
 from collections.abc import Generator
 from enum import Enum
+import logging
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 FILE_SUFFIX = '.raw'
 OVERWRITE = True
@@ -174,8 +178,7 @@ def find_children_objects(
         aws_access_key_id=access_key_id,
         aws_secret_access_key=secret_access_key,
     )
-    paginator = s3.get_paginator('list_objects_v2')
-    page_iterator = paginator.paginate(Bucket=bucket_name, Prefix=sub_prefix)
+    page_iterator = s3.get_paginator('list_objects_v2').paginate(Bucket=bucket_name, Prefix=sub_prefix)
     objects = []
     for page in page_iterator:
         if 'Contents' in page.keys():
@@ -392,7 +395,7 @@ def set_processing_status(
         cruise_name: str,
         sensor_name: str,
         file_name: str,  # Hash
-        new_status: str,  # TODO: change to enum?
+        new_status: str,
 ) -> None:
     # Updates PIPELINE_STATUS via new_status value
     # HASH: FILE_NAME, RANGE: SENSOR_NAME
@@ -406,7 +409,7 @@ def set_processing_status(
             'CRUISE_NAME': {'S': cruise_name},
             'SENSOR_NAME': {'S': sensor_name},  # RANGE
             'PIPELINE_TIME': {'S': datetime.now().isoformat(timespec="seconds") + "Z"},
-            'PIPELINE_STATUS': {'S': new_status},  # TODO: change to enum
+            'PIPELINE_STATUS': {'S': new_status},
         }
     )
     status_code = response['ResponseMetadata']['HTTPStatusCode']
@@ -571,7 +574,7 @@ def main(
         output_bucket: str="noaa-wcsd-zarr-pds",
         #input_file: str="D20070711-T182032.raw"
         #input_file: str="D20070712-T152416.raw"
-        input_file: str="D20070711-T182032.raw",  # TODO: integrate this...
+        input_file_name: str="D20070711-T182032.raw",  # TODO: integrate this...
 ) -> None:
     """This Lambda reads a raw Echosounder file from a s3 location. Calibrates
     & computes the Sv intensity values and then generates a Zarr store from the
@@ -594,7 +597,7 @@ def main(
     output_bucket : str
         Bucket where files are written to. Can be the NOAA NODD bucket if the
         proper credentials are provided.
-    input_file : str
+    input_file_name : str
         The specific file to be processed, e.g. D20070711-T182032.raw.
 
     Returns
@@ -652,10 +655,7 @@ def main(
         )
         #################################################################
         delete_all_local_raw_and_zarr_files()
-        download_raw_file(
-            input_bucket=input_bucket,
-            raw_file=raw_file,
-        )
+        download_raw_file(input_bucket=input_bucket, raw_file=raw_file)
         os.listdir()
         #################################################################
         print(f'Opening raw: {file_name}')
@@ -772,16 +772,27 @@ def main(
 
 #########################################################################
 def lambda_handler(event: dict, context: dict) -> dict:
-    message = json.loads(event['Records'][0]['body'])
+    logger.info(event)
+    ### input from sqs ###
+    #message = json.loads(event['Records'][0]['body'])
+    ### input from sns ###
+    message = json.loads(event['Records'][0]['Sns']['Message'])
     main(
-        prefix='rudy',
-        ship_name='Henry_B._Bigelow',
-        cruise_name='HB0707',
-        sensor_name='EK60',
-        input_bucket="noaa-wcsd-pds",
-        output_bucket="noaa-wcsd-zarr-pds",
-        input_file="D20070711-T182032.raw",
+        # prefix='rudy',
+        # ship_name='Henry_B._Bigelow',
+        # cruise_name='HB0707',
+        # sensor_name='EK60',
+        # input_bucket="noaa-wcsd-pds",
+        # output_bucket="noaa-wcsd-zarr-pds",
+        # input_file="D20070711-T182032.raw",
+        prefix=message["prefix"],
+        ship_name=message["ship_name"],
+        cruise_name=message["cruise_name"],
+        sensor_name=message["sensor_name"],
+        input_bucket=message["input_bucket"],
+        output_bucket=message["output_bucket"],
+        input_file_name=message["input_file_name"],
     )
-    return {}
+    return {"status": "success123"}
 
 #########################################################################

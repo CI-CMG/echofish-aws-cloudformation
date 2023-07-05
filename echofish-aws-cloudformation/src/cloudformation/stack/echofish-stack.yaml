@@ -18,13 +18,13 @@ Parameters:
   # noaa-wcsd-zarr-pds
   OutputBucketName:
     Type: String
-    Default: ""
+    Default: "noaa-wcsd-zarr-pds"
   CalibrationBucket:
     Type: String
-    Default: noaa-wcsd-pds-index
+    Default: "noaa-wcsd-pds-index"
   CalibrationFileKey:
     Type: String
-    Default: calibrated_crusies.csv
+    Default: "calibrated_crusies.csv"
 
   StackPrefix:
     Description: A prefix that identifies this stack
@@ -39,7 +39,7 @@ Parameters:
 
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230601153606
+    Default: 1.0.0.dev20230705193219
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128

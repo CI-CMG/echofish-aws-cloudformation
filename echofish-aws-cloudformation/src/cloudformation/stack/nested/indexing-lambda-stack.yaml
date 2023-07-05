@@ -124,7 +124,7 @@ Resources:
       Environment:
         Variables:
           INDEX_EK60_TABLE_NAME: !Ref IndexTableName
-          BUCKET_NAME: !Ref RawSourceBucket
+          INPUT_BUCKET_NAME: !Ref RawSourceBucket
           CALIBRATION_BUCKET: !Ref CalibrationBucket
           CALIBRATION_KEY: !Ref CalibrationFileKey
 

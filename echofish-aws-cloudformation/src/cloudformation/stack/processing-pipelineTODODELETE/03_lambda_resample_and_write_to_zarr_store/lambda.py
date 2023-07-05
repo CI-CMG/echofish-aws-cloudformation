@@ -458,7 +458,7 @@ def lambda_handler(event: dict, context: dict) -> dict:
 #####################################################################
 
 """
-docker build -f Dockerfile_OBSOLETE -t my-local-lambda:v1 . --no-cache
+docker build -f Dockerfile -t my-local-lambda:v1 . --no-cache
 #docker run -it -p 8080:8080 my-local-lambda:v1
 #docker run -it -p 8080:8080 -m 10000M -e AWS_LAMBDA_FUNCTION_MEMORY_SIZE=10000 my-local-lambda:v1
 #docker run -it -p 8080:8080 -m 15000M -e AWS_LAMBDA_FUNCTION_MEMORY_SIZE=15000 my-local-lambda:v1

@@ -6,7 +6,7 @@ RUN yum -y install python3-devel
 
 COPY requirements.txt .
 
-RUN pip3 install -r requirements_OBSOLETE.txt --target ${LAMBDA_TASK_ROOT}
+RUN pip3 install -r requirements.txt --target ${LAMBDA_TASK_ROOT}
 
 COPY lambda.py ${LAMBDA_TASK_ROOT}/
 
