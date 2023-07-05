@@ -39,7 +39,8 @@ Parameters:
 
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230705193219
+#    Default: 1.0.0.dev20230705193219
+    Default: 1.0.0.dev20230705212354
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
