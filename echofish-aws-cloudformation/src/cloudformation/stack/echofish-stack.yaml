@@ -11,10 +11,10 @@ Parameters:
     Default: ""
   RawSourceBucket:
     Type: String
-    Default: noaa-wcsd-pds
+    Default: "noaa-wcsd-pds"
   RawSourceBucketRegion:
     Type: String
-    Default: us-east-1
+    Default: "us-east-1"
   # noaa-wcsd-zarr-pds
   OutputBucketName:
     Type: String
@@ -24,7 +24,7 @@ Parameters:
     Default: "noaa-wcsd-pds-index"
   CalibrationFileKey:
     Type: String
-    Default: "calibrated_crusies.csv"
+    Default: "calibrated_cruises.csv"
 
   StackPrefix:
     Description: A prefix that identifies this stack
@@ -39,8 +39,7 @@ Parameters:
 
   IndexingLambdaImageTag:
     Type: String
-#    Default: 1.0.0.dev20230705193219
-    Default: 1.0.0.dev20230705212354
+    Default: 1.0.0.dev20230706162335
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -54,7 +53,11 @@ Parameters:
 
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230606211113
+#    Default: 1.0.0.dev20230707184722
+#    Default: 1.0.0.dev20230710064045
+#    Default: 1.0.0.dev20230710075010
+#    Default: 1.0.0.dev20230710154527
+    Default: 1.0.0.dev20230710163849
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128

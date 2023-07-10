@@ -313,6 +313,7 @@ Resources:
                 Resource: !Sub arn:${AWS::Partition}:s3:::${DeploymentBucketName}/*
                 Action:
                   - s3:GetObject
+                  - s3:HeadObject
 #         TODO restrict this
         - PolicyName: EC2
           PolicyDocument:

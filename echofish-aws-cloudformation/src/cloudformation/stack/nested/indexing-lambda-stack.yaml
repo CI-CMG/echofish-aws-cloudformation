@@ -101,6 +101,7 @@ Resources:
                   - dynamodb:Query
                   - dynamodb:Scan
                   - dynamodb:DeleteItem
+                  - dynamodb:DescribeTable
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
