@@ -9,6 +9,6 @@
   },
   {
     "ParameterKey": "EnvironmentType",
-    "ParameterValue": "dev"
+    "ParameterValue": "prod"
   }
 ]

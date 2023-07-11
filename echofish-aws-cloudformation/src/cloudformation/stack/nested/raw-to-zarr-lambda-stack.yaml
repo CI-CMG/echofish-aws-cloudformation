@@ -6,6 +6,8 @@ Parameters:
     Description: An optional permissions boundary to associate with roles
     Type: String
     Default: ""
+  EnvironmentType:
+    Type: String
   ImageTag:
     Type: String
   LogRetentionInDays:
@@ -36,6 +38,8 @@ Parameters:
 
 
 Conditions:
+  IsProduction:
+    !Equals [ !Ref EnvironmentType, prod ]
   HasPermissionsBoundary:
     Fn::Not:
       - Fn::Equals:
@@ -69,9 +73,9 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
         - PolicyName: DynamoDB
           PolicyDocument:
             Version: 2012-10-17
@@ -80,12 +84,12 @@ Resources:
                 Resource:
                   - !Ref FileInfoTableArn
                 Action:
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:PutItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
-                  - dynamodb:DeleteItem
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
+                  - 'dynamodb:DeleteItem'
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -102,12 +106,12 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:CopyObject
-                  - s3:GetObjectAttributes
-                  - s3:HeadObject
-                  - s3:DeleteObject
+                  - 's3:GetObject'
+                  - 's3:PutObject'
+                  - 's3:CopyObject'
+                  - 's3:GetObjectAttributes'
+                  - 's3:HeadObject'
+                  - 's3:DeleteObject'
                 Resource:
                   - 'arn:aws:s3:::*'
         - PolicyName: S32
@@ -119,8 +123,6 @@ Resources:
                   - s3:ListBucket
                 Resource:
                   - 'arn:aws:s3:::*'
-        #                Resource:
-        #                  - !Sub "arn:aws:s3:::${OutputBucket}/*"
 
 
   Lambda:
@@ -133,12 +135,23 @@ Resources:
       Timeout: !Ref Timeout
       Role: !GetAtt LambdaRole.Arn
       Environment:
-        Variables:
-          TABLE_NAME: !Ref FileInfoTableName
-          INPUT_BUCKET: !Ref RawSourceBucket
-          OUTPUT_BUCKET: !Ref RawSourceBucket
-          OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
-          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+        Variables: # https://github.com/aws/serverless-application-model/issues/187
+          !If
+            - IsProduction
+            -
+              TABLE_NAME: !Ref FileInfoTableName
+              INPUT_BUCKET: !Ref RawSourceBucket
+              OUTPUT_BUCKET: !Ref OutputBucket
+              OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+              OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+            -
+              TABLE_NAME: !Ref FileInfoTableName
+              INPUT_BUCKET: !Ref RawSourceBucket
+              OUTPUT_BUCKET: !Ref OutputBucket
+#          OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+#          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+#          OUTPUT_BUCKET_ACCESS_KEY: !If [IsProduction, !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}", Ref: AWS::NoValue]
+#          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !If [IsProduction, !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}", Ref: AWS::NoValue]
 
   LambdaPermission:
     Type: AWS::Lambda::Permission

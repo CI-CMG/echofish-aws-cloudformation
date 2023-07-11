@@ -227,7 +227,7 @@ def upload_zarr_store_to_s3(
     for subdir, dirs, files in os.walk(local_directory):
         for file in files:
             local_path = os.path.join(subdir, file)
-            print(local_path)
+            # print(local_path)
             s3_key = os.path.join(object_prefix, local_path)
             try:
                 s3.upload_file(

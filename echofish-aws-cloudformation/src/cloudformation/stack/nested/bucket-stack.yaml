@@ -161,12 +161,7 @@ Resources:
                   - arn:${AWS::Partition}:s3:::${StackPrefix}-${AWS::AccountId}-${Suffix}
                   - Suffix: !FindInMap [ BucketNameMap, DevOutputBucket, Value ]
 
-
-
-
-  #######################################################
-
-
+#######################################################
 Outputs:
   OutputBucketName:
     Value: !If [IsProduction, !Ref OutputBucketName, !Ref DevOutputBucket]

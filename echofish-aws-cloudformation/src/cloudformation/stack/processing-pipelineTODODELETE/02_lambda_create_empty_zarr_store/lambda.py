@@ -49,7 +49,7 @@ def delete_all_local_raw_and_zarr_files() -> None:
     """
     for i in ['*.raw*', '*.zarr']:
         for j in glob.glob(i):
-            print(f'Deleting {j}')
+            # print(f'Deleting {j}')
             if os.path.isdir(j):
                 shutil.rmtree(j, ignore_errors=True)
             elif os.path.isfile(j):

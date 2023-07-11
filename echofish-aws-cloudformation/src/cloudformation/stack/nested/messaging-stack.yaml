@@ -11,6 +11,16 @@ Resources:
 
   ##### Topics #####
 
+  IndexLambdaTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-trigger-index
+
   IndexDeadLetterTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -21,46 +31,6 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-index-dlq
 
-  CruiseSplitterDeadLetterTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-cruise-splitter-dlq
-
-  RawToZarrDeadLetterTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-raw-to-zarr-dlq
-
-  ResampleDeadLetterTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-resample-dlq
-
-
-  IndexLambdaTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-trigger-index
 
   CruiseSplitterLambdaTopic:
     Type: AWS::SNS::Topic
@@ -72,6 +42,17 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-cruise-splitter
 
+  CruiseSplitterDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-cruise-splitter-dlq
+
+
   RawToZarrLambdaTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -82,7 +63,7 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-raw-to-zarr
 
-  ZarrInitializerLambdaTopic:
+  RawToZarrDeadLetterTopic:
     Type: AWS::SNS::Topic
     Properties:
       Tags:
@@ -90,29 +71,58 @@ Resources:
           Value: EchoFish
         - Key: StackPrefix
           Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-zarr-init
+      TopicName: !Sub ${StackPrefix}-raw-to-zarr-dlq
 
+#  ResampleDeadLetterTopic:
+#    Type: AWS::SNS::Topic
+#    Properties:
+#      Tags:
+#        - Key: Application
+#          Value: EchoFish
+#        - Key: StackPrefix
+#          Value: !Ref StackPrefix
+#      TopicName: !Sub ${StackPrefix}-resample-dlq
 
-  ##### Topics #####
+#  ZarrInitializerLambdaTopic:
+  CreateEmptyZarrStoreLambdaTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-create-empty-zarr-store
 
+  CreateEmptyZarrStoreDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-create-empty-zarr-store-dlq
 
 Outputs:
   IndexLambdaTopicArn:
     Value: !Ref IndexLambdaTopic
   IndexDeadLetterTopicArn:
     Value: !Ref IndexDeadLetterTopic
-  CruiseSplitterDeadLetterTopicArn:
-    Value: !Ref CruiseSplitterDeadLetterTopic
-  RawToZarrDeadLetterTopicArn:
-    Value: !Ref RawToZarrDeadLetterTopic
-  ResampleDeadLetterTopicArn:
-    Value: !Ref ResampleDeadLetterTopic
   CruiseSplitterLambdaTopicArn:
     Value: !Ref CruiseSplitterLambdaTopic
+  CruiseSplitterDeadLetterTopicArn:
+    Value: !Ref CruiseSplitterDeadLetterTopic
   RawToZarrLambdaTopicArn:
     Value: !Ref RawToZarrLambdaTopic
-  ZarrInitializerLambdaTopicArn:
-    Value: !Ref ZarrInitializerLambdaTopic
+  RawToZarrDeadLetterTopicArn:
+    Value: !Ref RawToZarrDeadLetterTopic
+#  ResampleDeadLetterTopicArn:
+#    Value: !Ref ResampleDeadLetterTopic
+  CreateEmptyZarrStoreLambdaTopicArn:
+    Value: !Ref CreateEmptyZarrStoreLambdaTopic
+  CreateEmptyZarrStoreDeadLetterTopicArn:
+    Value: !Ref CreateEmptyZarrStoreDeadLetterTopic
 
 
 
