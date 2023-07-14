@@ -52,6 +52,26 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-cruise-splitter-dlq
 
+  ZarrCruiseAccumulatorLambdaTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-zarr-cruise-accumulator
+
+  ZarrCruiseAccumulatorDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-zarr-cruise-accumulator-dlq
+
 
   RawToZarrLambdaTopic:
     Type: AWS::SNS::Topic
@@ -113,6 +133,10 @@ Outputs:
     Value: !Ref CruiseSplitterLambdaTopic
   CruiseSplitterDeadLetterTopicArn:
     Value: !Ref CruiseSplitterDeadLetterTopic
+  ZarrCruiseAccumulatorLambdaTopicArn:
+    Value: !Ref ZarrCruiseAccumulatorLambdaTopic
+  ZarrCruiseAccumulatorDeadLetterTopicArn:
+    Value: !Ref ZarrCruiseAccumulatorDeadLetterTopic
   RawToZarrLambdaTopicArn:
     Value: !Ref RawToZarrLambdaTopic
   RawToZarrDeadLetterTopicArn:

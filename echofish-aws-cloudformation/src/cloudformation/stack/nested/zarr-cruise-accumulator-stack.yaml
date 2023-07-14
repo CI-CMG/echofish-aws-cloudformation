@@ -1,61 +1,48 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: EchoFish Raw To Zarr Lambda
+Description: Accumulates file level zarr complete events to cruise zarr processing events
 
 Parameters:
-  RolePermissionsBoundary:
-    Description: An optional permissions boundary to associate with roles
+  DeploymentBucketName:
     Type: String
-    Default: ""
-  EnvironmentType:
+  PermissionsBoundary:
     Type: String
-  ImageTag:
-    Type: String
-  LogRetentionInDays:
-    Type: Number
-    Default: 30
-  MemorySize:
-    Type: Number
   Timeout:
     Type: Number
-  RawToZarrLambdaTopicArn:
+  MemorySize:
+    Type: Number
+  LogRetentionInDays:
+    Type: Number
+  DeadLetterTopicArn:
+    Type: String
+  Version:
+    Type: String
+  DoneTopicArn:
     Type: String
   FileInfoTableArn:
     Type: String
   FileInfoTableName:
     Type: String
-  RawSourceBucket:
-    Type: String
-  OutputBucket:
-    Type: String
-  OutputBucketUserAccessKeyPsName:
-    Type: String
-  OutputBucketUserSecretAccessKeyPsName:
-    Type: String
-  DeadLetterTopicArn:
-    Type: String
-  DoneTopicArn:
+  TopicArn:
     Type: String
 
 
 Conditions:
-  IsProduction:
-    !Equals [ !Ref EnvironmentType, prod ]
   HasPermissionsBoundary:
     Fn::Not:
       - Fn::Equals:
           - ""
-          - !Ref RolePermissionsBoundary
+          - !Ref PermissionsBoundary
 
 Resources:
 
-  LambdaRole:
+  Role:
     Type: AWS::IAM::Role
     Properties:
       PermissionsBoundary:
         Fn::If:
           - HasPermissionsBoundary
-          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
-          - !Ref AWS::NoValue
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${PermissionsBoundary}
+          - AWS::NoValue
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -73,9 +60,9 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:PutLogEvents'
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
         - PolicyName: DynamoDB
           PolicyDocument:
             Version: 2012-10-17
@@ -84,12 +71,9 @@ Resources:
                 Resource:
                   - !Ref FileInfoTableArn
                 Action:
-                  - 'dynamodb:GetItem'
-                  - 'dynamodb:UpdateItem'
-                  - 'dynamodb:PutItem'
-                  - 'dynamodb:Query'
-                  - 'dynamodb:Scan'
-                  - 'dynamodb:DeleteItem'
+                  - dynamodb:GetItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -100,38 +84,24 @@ Resources:
                   - !Ref DoneTopicArn
                 Action:
                   - sns:Publish
-        - PolicyName: S3
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 's3:GetObject'
-                Resource:
-                  - !Sub arn:${AWS::Partition}:s3:::${RawSourceBucket}/*
-              - Effect: Allow
-                Action:
-                  - 's3:ListBucket'
-                Resource:
-                  - !Sub arn:${AWS::Partition}:s3:::${RawSourceBucket}
-
 
   Lambda:
     Type: AWS::Lambda::Function
     Properties:
       Code:
-        ImageUri: !Sub 118234403147.dkr.ecr.us-west-2.amazonaws.com/echofish-aws-raw-to-zarr-lambda:${ImageTag}
-      PackageType: Image
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/echofish-aws-zarr-cruise-accumulator-lambda-${Version}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.zarraccumulator.ZarrAccumulatorLambda::handleRequest
+      Runtime: java11
       MemorySize: !Ref MemorySize
       Timeout: !Ref Timeout
-      Role: !GetAtt LambdaRole.Arn
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt Role.Arn
       Environment:
         Variables:
+          TOPIC_ARN: !Ref DoneTopicArn
           TABLE_NAME: !Ref FileInfoTableName
-          INPUT_BUCKET: !Ref RawSourceBucket
-          OUTPUT_BUCKET: !Ref OutputBucket
-          OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
-          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+          LOG_LEVEL: info
 
   LambdaPermission:
     Type: AWS::Lambda::Permission
@@ -139,14 +109,14 @@ Resources:
       FunctionName: !Ref Lambda
       Principal: sns.amazonaws.com
       Action: lambda:InvokeFunction
-      SourceArn: !Ref RawToZarrLambdaTopicArn
+      SourceArn: !Ref TopicArn
 
   LambdaSubscription:
     Type: AWS::SNS::Subscription
     Properties:
       Protocol: lambda
       Endpoint: !GetAtt Lambda.Arn
-      TopicArn: !Ref RawToZarrLambdaTopicArn
+      TopicArn: !Ref TopicArn
 
   LogGroup:
     Type: AWS::Logs::LogGroup
@@ -168,12 +138,12 @@ Resources:
     Type: AWS::SNS::TopicPolicy
     Properties:
       Topics:
-        - !Ref RawToZarrLambdaTopicArn
+        - !Ref TopicArn
       PolicyDocument:
         Version: 2012-10-17
         Statement:
           - Sid: SubscribeToTopic
-            Resource: !Ref RawToZarrLambdaTopicArn
+            Resource: !Ref TopicArn
             Effect: Allow
             Principal:
               Service:
@@ -232,3 +202,8 @@ Outputs:
     Value: !GetAtt Lambda.Arn
   LambdaName:
     Value: !Ref Lambda
+
+
+
+
+
