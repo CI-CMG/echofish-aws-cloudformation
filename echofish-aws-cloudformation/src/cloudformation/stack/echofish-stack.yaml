@@ -39,7 +39,7 @@ Parameters:
   ### INDEXING ###
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230706162335
+    Default: 1.0.0.dev20230706165704
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -70,7 +70,7 @@ Parameters:
   ### RAW TO ZARR ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230714184257
+    Default: 1.0.0.dev20230715002145
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -138,20 +138,21 @@ Parameters:
 #    MaxValue: 900
 #    Default: 600
 
-#  RawToZarrErrorLambdaMemorySize:
-#    Type: Number
-#    MinValue: 128
-#    MaxValue: 10240
-#    Default: 1024
-#  RawToZarrErrorLambdaTimeout:
-#    Type: Number
-#    MinValue: 1
-#    MaxValue: 900
-#    Default: 240
-#  RawToZarrErrorLambdaConcurrency:
-#    Type: Number
-#    MinValue: 1
-#    Default: 3
+  ### RAW TO ZARR ERROR HANDLER ###
+  RawToZarrErrorLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 1024
+  RawToZarrErrorLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 240
+  RawToZarrErrorLambdaConcurrency:
+    Type: Number
+    MinValue: 1
+    Default: 3
 
 Conditions:
   CruiseSplitterLambdaIsRelease:
@@ -170,22 +171,22 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @ZarrCruiseAccumulatorLambda.version@
-#  RawToZarrErrorLambdaIsRelease:
-#    Fn::Equals:
-#      - @RawToZarrErrorLambda.version@
-#      - Fn::Join:
-#          - ""
-#          - Fn::Split:
-#              - "-SNAPSHOT"
-#              - @RawToZarrErrorLambda.version@
-  BucketDrainLambdaIsRelease:
+  RawToZarrErrorLambdaIsRelease:
     Fn::Equals:
-      - @BucketDrainLambda.version@
+      - @RawToZarrErrorLambda.version@
       - Fn::Join:
           - ""
           - Fn::Split:
               - "-SNAPSHOT"
-              - @BucketDrainLambda.version@
+              - @RawToZarrErrorLambda.version@
+  BucketDrainLambdaIsRelease:
+    Fn::Equals:
+      - @RawToZarrErrorLambda.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @RawToZarrErrorLambda.version@
 
 Resources:
 
@@ -341,36 +342,39 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
-  # TODO: remove or replace
-#  RawToZarrErrorLambdaStack:
-#    Type: AWS::CloudFormation::Stack
-#    Properties:
-#      Parameters:
-#        DeploymentBucketName:
-#          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-#        PermissionsBoundary: !Ref RolePermissionsBoundary
-#        MaxConcurrency: !Ref RawToZarrErrorLambdaConcurrency
-#        Timeout: !Ref RawToZarrErrorLambdaTimeout
-#        MemorySize: !Ref RawToZarrErrorLambdaMemorySize
-#        LogRetentionInDays: !Ref LogRetentionInDays
-#        Version: !If [ RawToZarrErrorLambdaIsRelease, @RawToZarrErrorLambda.version@, @RawToZarrErrorLambda.version@@dashTimestamp@ ]
-#        FileInfoTableArn:
-#          Fn::GetAtt:
-#            - DynamoDbStack
-#            - Outputs.FileInfoTableArn
-#        FileInfoTableName:
-#          Fn::GetAtt:
-#            - DynamoDbStack
-#            - Outputs.FileInfoTableName
-#        TopicArn:
-#          Fn::GetAtt:
-#            - MessagingStack
-#            - Outputs.CruiseSplitterDeadLetterTopicArn
-#      TemplateURL:
-#        Fn::Sub:
-#          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-error-stack_DELETE.yaml
-#          - DeploymentBucketName:
-#              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+  RawToZarrErrorLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        PermissionsBoundary: !Ref RolePermissionsBoundary
+        MaxConcurrency: !Ref RawToZarrErrorLambdaConcurrency
+        Timeout: !Ref RawToZarrErrorLambdaTimeout
+        MemorySize: !Ref RawToZarrErrorLambdaMemorySize
+        LogRetentionInDays: !Ref LogRetentionInDays
+        Version: !If [ RawToZarrErrorLambdaIsRelease, @RawToZarrErrorLambda.version@, @RawToZarrErrorLambda.version@@dashTimestamp@ ]
+        FileInfoTableArn:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableArn
+        FileInfoTableName:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableName
+        TopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.RawToZarrDeadLetterTopicArn
+        AccumulatorTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.ZarrCruiseAccumulatorLambdaTopicArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-error-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
   RawToZarrLambdaStack:
     Type: AWS::CloudFormation::Stack
@@ -409,7 +413,7 @@ Resources:
         DoneTopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.CreateEmptyZarrStoreLambdaTopicArn
+            - Outputs.ZarrCruiseAccumulatorLambdaTopicArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-lambda-stack.yaml

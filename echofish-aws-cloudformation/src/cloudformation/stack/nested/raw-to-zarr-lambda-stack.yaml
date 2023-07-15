@@ -132,6 +132,7 @@ Resources:
           OUTPUT_BUCKET: !Ref OutputBucket
           OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
           OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+          TOPIC_ARN: !Ref DoneTopicArn
 
   LambdaPermission:
     Type: AWS::Lambda::Permission

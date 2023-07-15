@@ -22,6 +22,8 @@ Parameters:
     Type: String
   TopicArn:
     Type: String
+  AccumulatorTopicArn:
+    Type: String
 
 
 Conditions:
@@ -74,17 +76,15 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:Query
                   - dynamodb:Scan
-                  - dynamodb:DeleteItem
-#        - PolicyName: SNS
-#          PolicyDocument:
-#            Version: 2012-10-17
-#            Statement:
-#              - Effect: Allow
-#                Resource:
-#                  - !Ref DeadLetterTopicArn
-#                  - !Ref DoneTopicArn
-#                Action:
-#                  - sns:Publish
+        - PolicyName: SNS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Ref AccumulatorTopicArn
+                Action:
+                  - sns:Publish
 
   Lambda:
     Type: AWS::Lambda::Function
@@ -101,6 +101,7 @@ Resources:
       Environment:
         Variables:
           TABLE_NAME: !Ref FileInfoTableName
+          ACCUMULATOR_TOPIC_ARN: !Ref AccumulatorTopicArn
           LOG_LEVEL: info
 
   LambdaPermission:

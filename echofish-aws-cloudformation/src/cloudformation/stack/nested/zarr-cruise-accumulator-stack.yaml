@@ -72,6 +72,8 @@ Resources:
                   - !Ref FileInfoTableArn
                 Action:
                   - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:PutItem
                   - dynamodb:Query
                   - dynamodb:Scan
         - PolicyName: SNS
