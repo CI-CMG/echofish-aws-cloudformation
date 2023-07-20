@@ -109,6 +109,10 @@ Parameters:
     MinValue: 1
     MaxValue: 900
     Default: 600
+  CreateEmptyZarrStoreLambdaConcurrency:
+    Type: Number
+    MinValue: 1
+    Default: 3
 
 #  ResampleAndWriteToZarrStoreLambdaImageTag:
 #    Type: String
@@ -453,6 +457,7 @@ Resources:
           Fn::GetAtt:
             - BucketStack
             - Outputs.OutputBucketRegion
+        MaxConcurrency: !Ref CreateEmptyZarrStoreLambdaConcurrency
         OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
         OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
       TemplateURL:
