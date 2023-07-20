@@ -30,6 +30,7 @@
     <ZarrCruiseAccumulatorLambda.version>1.0.0-SNAPSHOT</ZarrCruiseAccumulatorLambda.version>
     <BucketDrainLambda.version>1.0.0-SNAPSHOT</BucketDrainLambda.version>
     <RawToZarrErrorLambda.version>1.0.0-SNAPSHOT</RawToZarrErrorLambda.version>
+    <CreateEmptyZarrStoreLambda.version>1.0.0-SNAPSHOT</CreateEmptyZarrStoreLambda.version>
     <!--    <geoh.version>1.0.0-SNAPSHOT</geoh.version>-->
     <!--    <r2z.version>1.0.0-SNAPSHOT</r2z.version>-->
     <!--    <cr.version>1.0.0-SNAPSHOT</cr.version>-->
@@ -119,6 +120,13 @@
       <groupId>io.github.ci-cmg.echofish</groupId>
       <artifactId>echofish-aws-raw-to-zarr-error-handler</artifactId>
       <version>${RawToZarrErrorLambda.version}</version>
+      <classifier>lambda</classifier>
+      <type>zip</type>
+    </dependency>
+    <dependency>
+      <groupId>io.github.ci-cmg.echofish</groupId>
+      <artifactId>echofish-aws-create-empty-zarr-store-lambda</artifactId>
+      <version>${CreateEmptyZarrStoreLambda.version}</version>
       <classifier>lambda</classifier>
       <type>zip</type>
     </dependency>

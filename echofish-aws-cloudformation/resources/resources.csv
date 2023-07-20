@@ -3,3 +3,4 @@ CruiseSplitterLambda,io.github.ci-cmg.echofish,echofish-aws-cruise-splitter-lamb
 BucketDrainLambda,io.github.ci-cmg.aws,aws-cf-custom-resource-bucket-drain,@BucketDrainLambda.version@,@dashTimestamp@,lambda,zip,lambda
 RawToZarrErrorLambda,io.github.ci-cmg.echofish,echofish-aws-raw-to-zarr-error-handler,@RawToZarrErrorLambda.version@,@dashTimestamp@,lambda,zip,lambda
 ZarrCruiseAccumulatorLambda,io.github.ci-cmg.echofish,echofish-aws-zarr-cruise-accumulator-lambda,@ZarrCruiseAccumulatorLambda.version@,@dashTimestamp@,lambda,zip,lambda
+CreateEmptyZarrStoreLambda,io.github.ci-cmg.echofish,echofish-aws-create-empty-zarr-store-lambda,@CreateEmptyZarrStoreLambda.version@,@dashTimestamp@,lambda,zip,lambda

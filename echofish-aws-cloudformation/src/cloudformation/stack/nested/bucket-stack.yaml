@@ -18,6 +18,9 @@ Parameters:
   OutputBucketName:
     Type: String
     Default: ""
+  OutputBucketRegion:
+    Type: String
+    Default: ""
 
 Conditions:
   IsProduction:
@@ -174,5 +177,11 @@ Resources:
 Outputs:
   OutputBucketName:
     Value: !If [IsProduction, !Ref OutputBucketName, !Ref DevOutputBucket]
+  OutputBucketRegion:
+    Value:
+      Fn::If:
+        - IsProduction
+        - !Ref OutputBucketRegion
+        - !Sub ${AWS::Region}
 
 

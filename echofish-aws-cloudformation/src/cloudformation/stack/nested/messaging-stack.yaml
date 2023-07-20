@@ -93,15 +93,25 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-raw-to-zarr-dlq
 
-#  ResampleDeadLetterTopic:
-#    Type: AWS::SNS::Topic
-#    Properties:
-#      Tags:
-#        - Key: Application
-#          Value: EchoFish
-#        - Key: StackPrefix
-#          Value: !Ref StackPrefix
-#      TopicName: !Sub ${StackPrefix}-resample-dlq
+  ResampleZarrStoreTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-resample-zarr
+
+  ResampleZarrStoreDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-resample-zarr-dlq
 
 #  ZarrInitializerLambdaTopic:
   CreateEmptyZarrStoreLambdaTopic:
@@ -114,15 +124,6 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-create-empty-zarr-store
 
-  CreateEmptyZarrStoreDeadLetterTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-create-empty-zarr-store-dlq
 
 Outputs:
   IndexLambdaTopicArn:
@@ -141,12 +142,12 @@ Outputs:
     Value: !Ref RawToZarrLambdaTopic
   RawToZarrDeadLetterTopicArn:
     Value: !Ref RawToZarrDeadLetterTopic
-#  ResampleDeadLetterTopicArn:
-#    Value: !Ref ResampleDeadLetterTopic
+  ResampleZarrStoreDeadLetterTopicArn:
+    Value: !Ref ResampleZarrStoreDeadLetterTopic
+  ResampleZarrStoreTopicArn:
+    Value: !Ref ResampleZarrStoreTopic
   CreateEmptyZarrStoreLambdaTopicArn:
     Value: !Ref CreateEmptyZarrStoreLambdaTopic
-  CreateEmptyZarrStoreDeadLetterTopicArn:
-    Value: !Ref CreateEmptyZarrStoreDeadLetterTopic
 
 
 

@@ -18,6 +18,9 @@ Parameters:
   OutputBucketName:
     Type: String
     Default: "noaa-wcsd-zarr-pds"
+  OutputBucketRegion:
+    Type: String
+    Default: "us-east-1"
   CalibrationBucket:
     Type: String
     Default: "noaa-wcsd-pds-index"
@@ -94,25 +97,8 @@ Parameters:
     MaxValue: 900
     Default: 240
 
-
-#  RawToZarrDlqLambdaImageTag:
-#    Type: String
-#    Default: 1.0.0.dev20230524162855
-#  RawToZarrDlqLambdaMemorySize:
-#    Type: Number
-#    MinValue: 128
-#    MaxValue: 10240
-#    Default: 2048
-#  RawToZarrDlqLambdaTimeout:
-#    Type: Number
-#    MinValue: 1
-#    MaxValue: 900
-#    Default: 600
-
   ### CREATE EMPTY ZARR STORE ###
-  CreateEmptyZarrStoreLambdaImageTag:
-    Type: String
-    Default: 1.0.0.dev20230524182219
+
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -187,6 +173,14 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @RawToZarrErrorLambda.version@
+  CreateEmptyZarrStoreLambdaIsRelease:
+    Fn::Equals:
+      - @CreateEmptyZarrStoreLambda.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @CreateEmptyZarrStoreLambda.version@
 
 Resources:
 
@@ -420,32 +414,25 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
-#  RawToZarrDlqLambdaStack:
-#    Type: AWS::CloudFormation::Stack
-#    Properties:
-#      Parameters:
-#        RolePermissionsBoundary: !Ref RolePermissionsBoundary
-#        LogRetentionInDays: !Ref LogRetentionInDays
-#        ImageTag: !Ref RawToZarrDlqLambdaImageTag
-#        MemorySize: !Ref RawToZarrDlqLambdaMemorySize
-#        Timeout: !Ref RawToZarrDlqLambdaTimeout
-#      TemplateURL:
-#        Fn::Sub:
-#          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-dlq-lambda-stack_DELETE.yaml
-#          - DeploymentBucketName:
-#              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-
   CreateEmptyZarrStoreLambdaStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       Parameters:
-        EnvironmentType:
-          Fn::ImportValue: !Sub ${StackPrefix}-echofish-environment-type
-        RolePermissionsBoundary: !Ref RolePermissionsBoundary
-        LogRetentionInDays: !Ref LogRetentionInDays
-        ImageTag: !Ref CreateEmptyZarrStoreLambdaImageTag
-        MemorySize: !Ref CreateEmptyZarrStoreLambdaMemorySize
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        PermissionsBoundary: !Ref RolePermissionsBoundary
         Timeout: !Ref CreateEmptyZarrStoreLambdaTimeout
+        MemorySize: !Ref CreateEmptyZarrStoreLambdaMemorySize
+        LogRetentionInDays: !Ref LogRetentionInDays
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.ResampleZarrStoreDeadLetterTopicArn
+        Version: !If [ CreateEmptyZarrStoreLambdaIsRelease, @CreateEmptyZarrStoreLambda.version@, @CreateEmptyZarrStoreLambda.version@@dashTimestamp@ ]
+        DoneTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.ResampleZarrStoreTopicArn
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
@@ -454,24 +441,20 @@ Resources:
           Fn::GetAtt:
             - DynamoDbStack
             - Outputs.FileInfoTableName
+        TopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.CreateEmptyZarrStoreLambdaTopicArn
         OutputBucket:
           Fn::GetAtt:
             - BucketStack
             - Outputs.OutputBucketName
-        CreateEmptyZarrStoreLambdaTopicArn:
+        OutputBucketRegion:
           Fn::GetAtt:
-            - MessagingStack
-            - Outputs.CreateEmptyZarrStoreLambdaTopicArn
+            - BucketStack
+            - Outputs.OutputBucketRegion
         OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
         OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
-        DeadLetterTopicArn:
-          Fn::GetAtt:
-            - MessagingStack
-            - Outputs.CreateEmptyZarrStoreDeadLetterTopicArn
-        DoneTopicArn:
-          Fn::GetAtt:
-            - MessagingStack
-            - Outputs.CreateEmptyZarrStoreLambdaTopicArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/create-empty-zarr-store-lambda-stack.yaml

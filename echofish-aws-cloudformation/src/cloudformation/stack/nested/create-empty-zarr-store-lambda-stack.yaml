@@ -1,59 +1,56 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: EchoFish Create Empty Zarr Store Lambda
+Description: Creates an empty cruise Zarr store
 
 Parameters:
-  RolePermissionsBoundary:
-    Description: An optional permissions boundary to associate with roles
+  DeploymentBucketName:
     Type: String
-    Default: ""
-  EnvironmentType:
+  PermissionsBoundary:
     Type: String
-  ImageTag:
-    Type: String
-  LogRetentionInDays:
-    Type: Number
-    Default: 30
-  MemorySize:
-    Type: Number
   Timeout:
     Type: Number
-  #
-  CreateEmptyZarrStoreLambdaTopicArn:
+  MemorySize:
+    Type: Number
+  LogRetentionInDays:
+    Type: Number
+  DeadLetterTopicArn:
+    Type: String
+  Version:
+    Type: String
+  DoneTopicArn:
     Type: String
   FileInfoTableArn:
     Type: String
   FileInfoTableName:
     Type: String
+  TopicArn:
+    Type: String
   OutputBucket:
+    Type: String
+  OutputBucketRegion:
     Type: String
   OutputBucketUserAccessKeyPsName:
     Type: String
   OutputBucketUserSecretAccessKeyPsName:
     Type: String
-  DeadLetterTopicArn:
-    Type: String
-  DoneTopicArn:
-    Type: String
+
 
 Conditions:
-  IsProduction:
-    !Equals [ !Ref EnvironmentType, prod ]
   HasPermissionsBoundary:
     Fn::Not:
       - Fn::Equals:
           - ""
-          - !Ref RolePermissionsBoundary
+          - !Ref PermissionsBoundary
 
 Resources:
 
-  LambdaRole:
+  Role:
     Type: AWS::IAM::Role
     Properties:
       PermissionsBoundary:
         Fn::If:
           - HasPermissionsBoundary
-          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
-          - !Ref AWS::NoValue
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${PermissionsBoundary}
+          - AWS::NoValue
       AssumeRolePolicyDocument:
         Version: 2012-10-17
         Statement:
@@ -87,7 +84,6 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:Query
                   - dynamodb:Scan
-                  - dynamodb:DeleteItem
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -98,47 +94,28 @@ Resources:
                   - !Ref DoneTopicArn
                 Action:
                   - sns:Publish
-        - PolicyName: S3
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:CopyObject
-                  - s3:GetObjectAttributes
-                  - s3:HeadObject
-                  - s3:DeleteObject
-                Resource:
-                  - 'arn:aws:s3:::*'
-        - PolicyName: S32
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action:
-                  - s3:ListBucket
-                Resource:
-                  - 'arn:aws:s3:::*'
-
 
   Lambda:
     Type: AWS::Lambda::Function
     Properties:
       Code:
-        ImageUri: !Sub 118234403147.dkr.ecr.us-west-2.amazonaws.com/echofish-aws-create-empty-zarr-store-lambda:${ImageTag}
-      PackageType: Image
+        S3Bucket: !Ref DeploymentBucketName
+        S3Key: !Sub lambda/echofish-aws-create-empty-zarr-store-lambda-${Version}-lambda.zip
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.empyzarr.ZarrInitLambda::handleRequest
+      Runtime: java11
       MemorySize: !Ref MemorySize
       Timeout: !Ref Timeout
-      Role: !GetAtt LambdaRole.Arn
+      ReservedConcurrentExecutions: 1
+      Role: !GetAtt Role.Arn
       Environment:
         Variables:
-          TABLE_NAME: !Ref FileInfoTableName
           OUTPUT_BUCKET: !Ref OutputBucket
-          OUTPUT_BUCKET_ACCESS_KEY: !If [ IsProduction, !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}", Ref: AWS::NoValue ]
-          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !If [ IsProduction, !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}", Ref: AWS::NoValue ]
-
+          TABLE_NAME: !Ref FileInfoTableName
+          BUCKET_REGION: !Ref OutputBucketRegion
+          TOPIC_ARN: !Ref DoneTopicArn
+          OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+          LOG_LEVEL: info
 
   LambdaPermission:
     Type: AWS::Lambda::Permission
@@ -146,21 +123,20 @@ Resources:
       FunctionName: !Ref Lambda
       Principal: sns.amazonaws.com
       Action: lambda:InvokeFunction
-      SourceArn: !Ref CreateEmptyZarrStoreLambdaTopicArn
+      SourceArn: !Ref TopicArn
 
   LambdaSubscription:
     Type: AWS::SNS::Subscription
     Properties:
       Protocol: lambda
       Endpoint: !GetAtt Lambda.Arn
-      TopicArn: !Ref CreateEmptyZarrStoreLambdaTopicArn
+      TopicArn: !Ref TopicArn
 
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${Lambda}
       RetentionInDays: !Ref LogRetentionInDays
-
 
   LambdaEvent:
     Type: AWS::Lambda::EventInvokeConfig
@@ -176,12 +152,12 @@ Resources:
     Type: AWS::SNS::TopicPolicy
     Properties:
       Topics:
-        - !Ref CreateEmptyZarrStoreLambdaTopicArn
+        - !Ref TopicArn
       PolicyDocument:
         Version: 2012-10-17
         Statement:
           - Sid: SubscribeToTopic
-            Resource: !Ref CreateEmptyZarrStoreLambdaTopicArn
+            Resource: !Ref TopicArn
             Effect: Allow
             Principal:
               Service:
