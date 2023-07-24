@@ -15,6 +15,8 @@ Parameters:
     Default: 30
   MemorySize:
     Type: Number
+  EphemeralStorageSize:
+    Type: Number
   Timeout:
     Type: Number
   RawToZarrLambdaTopicArn:
@@ -133,6 +135,8 @@ Resources:
           OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
           OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
           TOPIC_ARN: !Ref DoneTopicArn
+      EphemeralStorage:
+        Size: !Ref EphemeralStorageSize
 
   LambdaPermission:
     Type: AWS::Lambda::Permission

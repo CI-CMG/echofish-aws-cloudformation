@@ -416,6 +416,30 @@ def set_processing_status(
     assert(status_code == 200), "Unable to update dynamodb table"
 
 
+def update_processing_status(
+        prefix: str,
+        ship_name: str,
+        cruise_name: str,
+        sensor_name: str,
+        file_name: str,  # Hash
+        new_status: str,
+) -> None:
+    # Updates PIPELINE_STATUS via new_status value
+    # HASH: FILE_NAME, RANGE: SENSOR_NAME
+    dynamodb = boto3.Session().client(service_name='dynamodb')
+    table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
+    response = dynamodb.put_item(  # TODO: verify status_code['ResponseMetadata']['HTTPStatusCode'] == 200
+        TableName=table_name,
+        Item={
+            'FILE_NAME': {'S': file_name},  # HASH
+            'CRUISE_NAME': {'S': cruise_name}, # RANGE
+            'PIPELINE_TIME': {'S': datetime.now().isoformat(timespec="seconds") + "Z"},
+            'PIPELINE_STATUS': {'S': new_status},
+        }
+    )
+    status_code = response['ResponseMetadata']['HTTPStatusCode']
+    assert(status_code == 200), "Unable to update dynamodb table"
+
 #####################################################################
 def get_processing_status(
         prefix: str,
@@ -672,7 +696,7 @@ def main(
         #################################################################
         zarr_path = os.path.join(zarr_prefix, store_name)
         # min_echo_range = float(np.nanmin(ds_Sv.echo_range.values[np.nonzero(ds_Sv.echo_range.values)]))
-        min_echo_range = np.min(np.diff(ds_Sv.echo_range.values))  # TODO: change to min_depth_diff
+        min_echo_range = np.nanmin(np.diff(ds_Sv.echo_range.values))  # TODO: change to min_depth_diff
         max_echo_range = float(np.nanmax(ds_Sv.echo_range))
         num_ping_time_dropna = lat[~np.isnan(lat)].shape[0]  # symmetric to lon
         start_time = np.datetime_as_string(ds_Sv.ping_time.values[0], unit='ms') + "Z"
