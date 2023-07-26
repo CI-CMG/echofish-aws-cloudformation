@@ -6,11 +6,11 @@ Parameters:
     Description: An optional permissions boundary to associate with roles
     Type: String
     Default: ""
-  ImageTag:
-    Type: String
   LogRetentionInDays:
     Type: Number
     Default: 30
+  ImageTag:
+    Type: String
   MemorySize:
     Type: Number
   Timeout:
@@ -25,7 +25,7 @@ Parameters:
     Type: String
   CalibrationFileKey:
     Type: String
-  IndexLambdaTopicArn:
+  TopicArn:
     Type: String
   DeadLetterTopicArn:
     Type: String
@@ -55,7 +55,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action:
-              - sts:AssumeRole
+              - 'sts:AssumeRole'
       Policies:
         - PolicyName: Logging
           PolicyDocument:
@@ -64,9 +64,9 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
         - PolicyName: S3
           PolicyDocument:
             Version: 2012-10-17
@@ -74,19 +74,19 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:s3:::${RawSourceBucket}/*
                 Action:
-                  - s3:GetObject
+                  - 's3:GetObject'
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:s3:::${RawSourceBucket}
                 Action:
-                  - s3:ListBucket
+                  - 's3:ListBucket'
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:s3:::${CalibrationBucket}/*
                 Action:
-                  - s3:GetObject
+                  - 's3:GetObject'
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:s3:::${CalibrationBucket}
                 Action:
-                  - s3:ListBucket
+                  - 's3:ListBucket'
         - PolicyName: DynamoDB
           PolicyDocument:
             Version: 2012-10-17
@@ -95,13 +95,13 @@ Resources:
                 Resource:
                   - !Ref IndexTableArn
                 Action:
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:PutItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
-                  - dynamodb:DeleteItem
-                  - dynamodb:DescribeTable
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
+                  - 'dynamodb:DeleteItem'
+                  - 'dynamodb:DescribeTable'
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -110,7 +110,7 @@ Resources:
                 Resource:
                   - !Ref DeadLetterTopicArn
                 Action:
-                  - sns:Publish
+                  - 'sns:Publish'
 
 
   Lambda:
@@ -136,14 +136,14 @@ Resources:
       FunctionName: !Ref Lambda
       Principal: sns.amazonaws.com
       Action: lambda:InvokeFunction
-      SourceArn: !Ref IndexLambdaTopicArn
+      SourceArn: !Ref TopicArn
 
   LambdaSubscription:
     Type: AWS::SNS::Subscription
     Properties:
       Protocol: lambda
       Endpoint: !GetAtt Lambda.Arn
-      TopicArn: !Ref IndexLambdaTopicArn
+      TopicArn: !Ref TopicArn
 
 
   LogGroup:
@@ -166,12 +166,12 @@ Resources:
     Type: AWS::SNS::TopicPolicy
     Properties:
       Topics:
-        - !Ref IndexLambdaTopicArn
+        - !Ref TopicArn
       PolicyDocument:
         Version: 2012-10-17
         Statement:
           - Sid: SubscribeToTopic
-            Resource: !Ref IndexLambdaTopicArn
+            Resource: !Ref TopicArn
             Effect: Allow
             Principal:
               Service:

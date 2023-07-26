@@ -1,16 +1,12 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: EchoFish Topics and Queues
-
+Description: EchoFish topics and queues
 
 Parameters:
   StackPrefix:
     Type: String
 
 Resources:
-
-
-  ##### Topics #####
-
+  ### [Step 0] Indexing ###
   IndexLambdaTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -20,7 +16,6 @@ Resources:
         - Key: StackPrefix
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-trigger-index
-
   IndexDeadLetterTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -31,7 +26,7 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-index-dlq
 
-
+  ### [Step 1] Cruise Splitter ###
   CruiseSplitterLambdaTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -41,7 +36,6 @@ Resources:
         - Key: StackPrefix
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-cruise-splitter
-
   CruiseSplitterDeadLetterTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -52,27 +46,7 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-cruise-splitter-dlq
 
-  ZarrCruiseAccumulatorLambdaTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-zarr-cruise-accumulator
-
-  ZarrCruiseAccumulatorDeadLetterTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Tags:
-        - Key: Application
-          Value: EchoFish
-        - Key: StackPrefix
-          Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-zarr-cruise-accumulator-dlq
-
-
+  ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -82,7 +56,6 @@ Resources:
         - Key: StackPrefix
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-raw-to-zarr
-
   RawToZarrDeadLetterTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -93,7 +66,11 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-raw-to-zarr-dlq
 
-  ResampleZarrStoreTopic:
+  ### [Step 2b] Raw to Zarr Error Handler ###
+  # ?
+
+  ### [Step 3] Zarr Cruise Accumulator ###
+  ZarrCruiseAccumulatorLambdaTopic:
     Type: AWS::SNS::Topic
     Properties:
       Tags:
@@ -101,9 +78,8 @@ Resources:
           Value: EchoFish
         - Key: StackPrefix
           Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-resample-zarr
-
-  ResampleZarrStoreDeadLetterTopic:
+      TopicName: !Sub ${StackPrefix}-zarr-cruise-accumulator
+  ZarrCruiseAccumulatorDeadLetterTopic:
     Type: AWS::SNS::Topic
     Properties:
       Tags:
@@ -111,9 +87,9 @@ Resources:
           Value: EchoFish
         - Key: StackPrefix
           Value: !Ref StackPrefix
-      TopicName: !Sub ${StackPrefix}-resample-zarr-dlq
+      TopicName: !Sub ${StackPrefix}-zarr-cruise-accumulator-dlq
 
-#  ZarrInitializerLambdaTopic:
+  ### [Step 4] Create Empty Zarr Store ###
   CreateEmptyZarrStoreLambdaTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -124,31 +100,67 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-create-empty-zarr-store
 
+  ### [Step 5] Resample and Write to Zarr Store ###
+  ResampleAndWriteToZarrStoreLambdaTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-resample-and-write-to-zarr-store
+  ResampleAndWriteToZarrStoreDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-resample-and-write-to-zarr-store-dlq
+
+  ### [Step 6] Finished Processing ###
+  ProcessingFinishedTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-processing-finished
+
 
 Outputs:
+  ### [Step 0] Indexing ###
   IndexLambdaTopicArn:
     Value: !Ref IndexLambdaTopic
   IndexDeadLetterTopicArn:
     Value: !Ref IndexDeadLetterTopic
+  ### [Step 1] Cruise Splitter ###
   CruiseSplitterLambdaTopicArn:
     Value: !Ref CruiseSplitterLambdaTopic
   CruiseSplitterDeadLetterTopicArn:
     Value: !Ref CruiseSplitterDeadLetterTopic
-  ZarrCruiseAccumulatorLambdaTopicArn:
-    Value: !Ref ZarrCruiseAccumulatorLambdaTopic
-  ZarrCruiseAccumulatorDeadLetterTopicArn:
-    Value: !Ref ZarrCruiseAccumulatorDeadLetterTopic
+  ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaTopicArn:
     Value: !Ref RawToZarrLambdaTopic
   RawToZarrDeadLetterTopicArn:
     Value: !Ref RawToZarrDeadLetterTopic
-  ResampleZarrStoreDeadLetterTopicArn:
-    Value: !Ref ResampleZarrStoreDeadLetterTopic
-  ResampleZarrStoreTopicArn:
-    Value: !Ref ResampleZarrStoreTopic
+  ### [Step 3] Zarr Cruise Accumulator ###
+  ZarrCruiseAccumulatorLambdaTopicArn:
+    Value: !Ref ZarrCruiseAccumulatorLambdaTopic
+  ZarrCruiseAccumulatorDeadLetterTopicArn:
+    Value: !Ref ZarrCruiseAccumulatorDeadLetterTopic
+  ### [Step 4] Create Empty Zarr Store ###
   CreateEmptyZarrStoreLambdaTopicArn:
     Value: !Ref CreateEmptyZarrStoreLambdaTopic
-
-
-
-
+  ### [Step 5] Resample and Write to Zarr Store ###
+  ResampleAndWriteToZarrStoreLambdaTopicArn:
+    Value: !Ref ResampleAndWriteToZarrStoreLambdaTopic
+  ResampleAndWriteToZarrStoreDeadLetterTopicArn:
+    Value: !Ref ResampleAndWriteToZarrStoreDeadLetterTopic
+  ### Finished ###
+  ProcessingFinishedTopicArn:
+    Value: !Ref ProcessingFinishedTopic

@@ -1,22 +1,46 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: EchoFish Resample And Write To Zarr Store Lambda
+Description: Read file-level Zarr store, resample, and write to cruise-level Zarr store
 
 Parameters:
+  EnvironmentType:
+    Type: String
   RolePermissionsBoundary:
     Description: An optional permissions boundary to associate with roles
     Type: String
     Default: ""
-  ImageTag:
-    Type: String
   LogRetentionInDays:
     Type: Number
     Default: 30
+  ImageTag:
+    Type: String
   MemorySize:
+    Type: Number
+  EphemeralStorageSize:
     Type: Number
   Timeout:
     Type: Number
+  MaxConcurrency:
+    Type: Number
+  FileInfoTableArn:
+    Type: String
+  FileInfoTableName:
+    Type: String
+  OutputBucket:
+    Type: String
+  OutputBucketUserAccessKeyPsName:
+    Type: String
+  OutputBucketUserSecretAccessKeyPsName:
+    Type: String
+  TopicArn:
+    Type: String
+  DeadLetterTopicArn:
+    Type: String
+  DoneTopicArn:
+    Type: String
 
 Conditions:
+  IsProduction:
+    !Equals [ !Ref EnvironmentType, prod ]
   HasPermissionsBoundary:
     Fn::Not:
       - Fn::Equals:
@@ -24,7 +48,6 @@ Conditions:
           - !Ref RolePermissionsBoundary
 
 Resources:
-
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -41,7 +64,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action:
-              - sts:AssumeRole
+              - 'sts:AssumeRole'
       Policies:
         - PolicyName: Logging
           PolicyDocument:
@@ -50,10 +73,46 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+        - PolicyName: DynamoDB
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Ref FileInfoTableArn
+                Action:
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
+                  - 'dynamodb:DeleteItem'
+        - PolicyName: SNS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource:
+                  - !Ref DeadLetterTopicArn
+                  - !Ref DoneTopicArn
+                Action:
+                  - 'sns:Publish'
+        - PolicyName: S3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:PutObjectAcl'
+                  - 's3:GetObject'
+                  - 's3:GetObjectAcl'
+                  - 's3:DeleteObject'
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${OutputBucket}/*
 
   Lambda:
     Type: AWS::Lambda::Function
@@ -63,15 +122,118 @@ Resources:
       PackageType: Image
       MemorySize: !Ref MemorySize
       Timeout: !Ref Timeout
+      ReservedConcurrentExecutions: !Ref MaxConcurrency
       Role: !GetAtt LambdaRole.Arn
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref FileInfoTableName
+          OUTPUT_BUCKET: !Ref OutputBucket
+          OUTPUT_BUCKET_ACCESS_KEY:
+            Fn::If:
+              - IsProduction
+              - !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+              - ""
+          OUTPUT_BUCKET_SECRET_ACCESS_KEY:
+            Fn::If:
+              - IsProduction
+              - !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+              - ""
+          TOPIC_ARN: !Ref DoneTopicArn
+      EphemeralStorage:
+        Size: !Ref EphemeralStorageSize
 
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Lambda
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref TopicArn
 
+  LambdaSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt Lambda.Arn
+      TopicArn: !Ref TopicArn
 
-  EC2LogGroup:
+  LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/ec2/${AWS::StackName}/resample-and-write-to-zarr-store-lambda
+      LogGroupName: !Sub /aws/lambda/${Lambda}
       RetentionInDays: !Ref LogRetentionInDays
+
+  LambdaEvent:
+    Type: AWS::Lambda::EventInvokeConfig
+    Properties:
+      FunctionName: !Ref Lambda
+      Qualifier: $LATEST
+      MaximumRetryAttempts: 0
+      DestinationConfig:
+        OnFailure:
+          Destination: !Ref DeadLetterTopicArn
+
+  TopicSubscribePolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref TopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: SubscribeToTopic
+            Resource: !Ref TopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Subscribe
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt Lambda.Arn
+
+  TopicPublishPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref DoneTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublishToTopic
+            Effect: Allow
+            Resource: !Ref DoneTopicArn
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Publish
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt Lambda.Arn
+
+  TopicDlqPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref DeadLetterTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublishToTopic
+            Effect: Allow
+            Resource: !Ref DeadLetterTopicArn
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Publish
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt Lambda.Arn
 
 
 Outputs:

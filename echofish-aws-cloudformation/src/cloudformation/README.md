@@ -139,3 +139,14 @@ aws cloudformation update-stack \
   --template-url https://s3.amazonaws.com/BUCKET_NAME/stack/echofish-stack.yaml\
   --parameters file://echofish-parameters.json
 ```
+
+### Scripting Shortcut
+Run the following to create-or-update the stack:
+```bash
+# [1] in the parent directory do a:
+mvn clean install
+# [2] in the echofish-aws-cloudformation directory:
+saml2aws -a echofish login
+./deploy-create.sh  # or "./deploy-sync.sh" if already created
+./stack-create.sh   # or "./stack-update.sh" if you want to update existing stack
+```

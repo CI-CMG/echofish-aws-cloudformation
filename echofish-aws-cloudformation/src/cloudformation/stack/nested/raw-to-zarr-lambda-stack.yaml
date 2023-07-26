@@ -1,26 +1,26 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: EchoFish Raw To Zarr Lambda
+Description: Converts raw EK60 data into Zarr store using echopype
 
 Parameters:
+  EnvironmentType:
+    Type: String
   RolePermissionsBoundary:
     Description: An optional permissions boundary to associate with roles
     Type: String
     Default: ""
-  EnvironmentType:
-    Type: String
-  ImageTag:
-    Type: String
   LogRetentionInDays:
     Type: Number
     Default: 30
+  ImageTag:
+    Type: String
   MemorySize:
     Type: Number
   EphemeralStorageSize:
     Type: Number
   Timeout:
     Type: Number
-  RawToZarrLambdaTopicArn:
-    Type: String
+  MaxConcurrency:
+    Type: Number
   FileInfoTableArn:
     Type: String
   FileInfoTableName:
@@ -32,6 +32,8 @@ Parameters:
   OutputBucketUserAccessKeyPsName:
     Type: String
   OutputBucketUserSecretAccessKeyPsName:
+    Type: String
+  TopicArn:
     Type: String
   DeadLetterTopicArn:
     Type: String
@@ -49,7 +51,6 @@ Conditions:
           - !Ref RolePermissionsBoundary
 
 Resources:
-
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -66,7 +67,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action:
-              - sts:AssumeRole
+              - 'sts:AssumeRole'
       Policies:
         - PolicyName: Logging
           PolicyDocument:
@@ -101,19 +102,24 @@ Resources:
                   - !Ref DeadLetterTopicArn
                   - !Ref DoneTopicArn
                 Action:
-                  - sns:Publish
+                  - 'sns:Publish'
         - PolicyName: S3
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
+                  - 's3:PutObject'
+                  - 's3:PutObjectAcl'
                   - 's3:GetObject'
+                  - 's3:GetObjectAcl'
+                  - 's3:DeleteObject'
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${RawSourceBucket}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${OutputBucket}/*
               - Effect: Allow
                 Action:
-                  - 's3:ListBucket'
+                  - 's3: '
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${RawSourceBucket}
 
@@ -126,14 +132,23 @@ Resources:
       PackageType: Image
       MemorySize: !Ref MemorySize
       Timeout: !Ref Timeout
+      ReservedConcurrentExecutions: !Ref MaxConcurrency
       Role: !GetAtt LambdaRole.Arn
       Environment:
         Variables:
           TABLE_NAME: !Ref FileInfoTableName
           INPUT_BUCKET: !Ref RawSourceBucket
           OUTPUT_BUCKET: !Ref OutputBucket
-          OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
-          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+          OUTPUT_BUCKET_ACCESS_KEY:
+            Fn::If:
+              - IsProduction
+              - !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+              - ""
+          OUTPUT_BUCKET_SECRET_ACCESS_KEY:
+            Fn::If:
+              - IsProduction
+              - !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+              - ""
           TOPIC_ARN: !Ref DoneTopicArn
       EphemeralStorage:
         Size: !Ref EphemeralStorageSize
@@ -144,14 +159,14 @@ Resources:
       FunctionName: !Ref Lambda
       Principal: sns.amazonaws.com
       Action: lambda:InvokeFunction
-      SourceArn: !Ref RawToZarrLambdaTopicArn
+      SourceArn: !Ref TopicArn
 
   LambdaSubscription:
     Type: AWS::SNS::Subscription
     Properties:
       Protocol: lambda
       Endpoint: !GetAtt Lambda.Arn
-      TopicArn: !Ref RawToZarrLambdaTopicArn
+      TopicArn: !Ref TopicArn
 
   LogGroup:
     Type: AWS::Logs::LogGroup
@@ -173,12 +188,12 @@ Resources:
     Type: AWS::SNS::TopicPolicy
     Properties:
       Topics:
-        - !Ref RawToZarrLambdaTopicArn
+        - !Ref TopicArn
       PolicyDocument:
         Version: 2012-10-17
         Statement:
           - Sid: SubscribeToTopic
-            Resource: !Ref RawToZarrLambdaTopicArn
+            Resource: !Ref TopicArn
             Effect: Allow
             Principal:
               Service:

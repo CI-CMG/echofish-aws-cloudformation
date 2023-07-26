@@ -1,10 +1,10 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Accumulates file level zarr complete events to cruise zarr processing events
+Description: Accumulates file-level Zarr store complete events to prompt cruise-level Zarr store initializer
 
 Parameters:
   DeploymentBucketName:
     Type: String
-  PermissionsBoundary:
+  RolePermissionsBoundary:
     Type: String
   Timeout:
     Type: Number
@@ -12,17 +12,17 @@ Parameters:
     Type: Number
   LogRetentionInDays:
     Type: Number
-  DeadLetterTopicArn:
-    Type: String
   Version:
-    Type: String
-  DoneTopicArn:
     Type: String
   FileInfoTableArn:
     Type: String
   FileInfoTableName:
     Type: String
   TopicArn:
+    Type: String
+  DoneTopicArn:
+    Type: String
+  DeadLetterTopicArn:
     Type: String
 
 
@@ -31,7 +31,7 @@ Conditions:
     Fn::Not:
       - Fn::Equals:
           - ""
-          - !Ref PermissionsBoundary
+          - !Ref RolePermissionsBoundary
 
 Resources:
 
@@ -41,7 +41,7 @@ Resources:
       PermissionsBoundary:
         Fn::If:
           - HasPermissionsBoundary
-          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${PermissionsBoundary}
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
           - AWS::NoValue
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -51,7 +51,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action:
-              - sts:AssumeRole
+              - 'sts:AssumeRole'
       Policies:
         - PolicyName: Logging
           PolicyDocument:
@@ -60,9 +60,9 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
         - PolicyName: DynamoDB
           PolicyDocument:
             Version: 2012-10-17
@@ -71,11 +71,11 @@ Resources:
                 Resource:
                   - !Ref FileInfoTableArn
                 Action:
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:PutItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -85,7 +85,7 @@ Resources:
                   - !Ref DeadLetterTopicArn
                   - !Ref DoneTopicArn
                 Action:
-                  - sns:Publish
+                  - 'sns:Publish'
 
   Lambda:
     Type: AWS::Lambda::Function
@@ -132,9 +132,9 @@ Resources:
       FunctionName: !Ref Lambda
       Qualifier: $LATEST
       MaximumRetryAttempts: 0
-      DestinationConfig:
-        OnFailure:
-          Destination: !Ref DeadLetterTopicArn
+#      DestinationConfig:
+#        OnFailure:
+#          Destination: !Ref DeadLetterTopicArn
 
   TopicSubscribePolicy:
     Type: AWS::SNS::TopicPolicy
@@ -177,26 +177,26 @@ Resources:
                 aws:SourceArn:
                   - !GetAtt Lambda.Arn
 
-  TopicDlqPolicy:
-    Type: AWS::SNS::TopicPolicy
-    Properties:
-      Topics:
-        - !Ref DeadLetterTopicArn
-      PolicyDocument:
-        Version: 2012-10-17
-        Statement:
-          - Sid: PublishToTopic
-            Effect: Allow
-            Resource: !Ref DeadLetterTopicArn
-            Principal:
-              Service:
-                - lambda.amazonaws.com
-            Action:
-              - sns:Publish
-            Condition:
-              ArnEquals:
-                aws:SourceArn:
-                  - !GetAtt Lambda.Arn
+#  TopicDlqPolicy:
+#    Type: AWS::SNS::TopicPolicy
+#    Properties:
+#      Topics:
+#        - !Ref DeadLetterTopicArn
+#      PolicyDocument:
+#        Version: 2012-10-17
+#        Statement:
+#          - Sid: PublishToTopic
+#            Effect: Allow
+#            Resource: !Ref DeadLetterTopicArn
+#            Principal:
+#              Service:
+#                - lambda.amazonaws.com
+#            Action:
+#              - sns:Publish
+#            Condition:
+#              ArnEquals:
+#                aws:SourceArn:
+#                  - !GetAtt Lambda.Arn
 
 
 Outputs:

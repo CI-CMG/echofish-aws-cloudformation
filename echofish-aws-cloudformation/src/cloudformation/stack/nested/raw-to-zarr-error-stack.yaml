@@ -4,7 +4,7 @@ Description: Error Handler for Raw To Zarr
 Parameters:
   DeploymentBucketName:
     Type: String
-  PermissionsBoundary:
+  RolePermissionsBoundary:
     Type: String
   MaxConcurrency:
     Type: Number
@@ -31,7 +31,7 @@ Conditions:
     Fn::Not:
       - Fn::Equals:
           - ""
-          - !Ref PermissionsBoundary
+          - !Ref RolePermissionsBoundary
 
 Resources:
 
@@ -41,7 +41,7 @@ Resources:
       PermissionsBoundary:
         Fn::If:
           - HasPermissionsBoundary
-          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${PermissionsBoundary}
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
           - AWS::NoValue
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -51,7 +51,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action:
-              - sts:AssumeRole
+              - 'sts:AssumeRole'
       Policies:
         - PolicyName: Logging
           PolicyDocument:
@@ -60,9 +60,9 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
         - PolicyName: DynamoDB
           PolicyDocument:
             Version: 2012-10-17
@@ -71,11 +71,11 @@ Resources:
                 Resource:
                   - !Ref FileInfoTableArn
                 Action:
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:PutItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -84,7 +84,7 @@ Resources:
                 Resource:
                   - !Ref AccumulatorTopicArn
                 Action:
-                  - sns:Publish
+                  - 'sns:Publish'
 
   Lambda:
     Type: AWS::Lambda::Function

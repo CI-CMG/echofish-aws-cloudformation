@@ -1,53 +1,56 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Triggers Events For Files Per Cruise
+Description: Triggers event for each file in a cruise
 
 Parameters:
+  EnvironmentType:
+    Type: String
   DeploymentBucketName:
     Type: String
-  PermissionsBoundary:
-    Type: String
-  MaxConcurrency:
-    Type: Number
-  Timeout:
-    Type: Number
-  MemorySize:
-    Type: Number
-  InputBucketName:
-    Type: String
-  InputBucketRegion:
+  RolePermissionsBoundary:
     Type: String
   LogRetentionInDays:
     Type: Number
-  DeadLetterTopicArn:
-    Type: String
   Version:
     Type: String
-  DoneTopicArn:
-    Type: String
+  MemorySize:
+    Type: Number
+  Timeout:
+    Type: Number
+  MaxConcurrency:
+    Type: Number
   FileInfoTableArn:
     Type: String
   FileInfoTableName:
     Type: String
+  InputBucketName:
+    Type: String
+  InputBucketRegion:
+    Type: String
   TopicArn:
+    Type: String
+  DoneTopicArn:
+    Type: String
+  DeadLetterTopicArn:
     Type: String
 
 
 Conditions:
+  IsProduction:
+    !Equals [ !Ref EnvironmentType, prod ]
   HasPermissionsBoundary:
     Fn::Not:
       - Fn::Equals:
           - ""
-          - !Ref PermissionsBoundary
+          - !Ref RolePermissionsBoundary
 
 Resources:
-
   Role:
     Type: AWS::IAM::Role
     Properties:
       PermissionsBoundary:
         Fn::If:
           - HasPermissionsBoundary
-          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${PermissionsBoundary}
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
           - AWS::NoValue
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -57,7 +60,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action:
-              - sts:AssumeRole
+              - 'sts:AssumeRole'
       Policies:
         - PolicyName: Logging
           PolicyDocument:
@@ -66,9 +69,9 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
         - PolicyName: S3
           PolicyDocument:
             Version: 2012-10-17
@@ -76,7 +79,7 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:s3:::${InputBucketName}
                 Action:
-                  - s3:ListBucket
+                  - 's3:ListBucket'
         - PolicyName: DynamoDB
           PolicyDocument:
             Version: 2012-10-17
@@ -85,12 +88,12 @@ Resources:
                 Resource:
                   - !Ref FileInfoTableArn
                 Action:
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:PutItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
-                  - dynamodb:DeleteItem
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
+                  - 'dynamodb:DeleteItem'
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -100,7 +103,7 @@ Resources:
                   - !Ref DeadLetterTopicArn
                   - !Ref DoneTopicArn
                 Action:
-                  - sns:Publish
+                  - 'sns:Publish'
 
   Lambda:
     Type: AWS::Lambda::Function

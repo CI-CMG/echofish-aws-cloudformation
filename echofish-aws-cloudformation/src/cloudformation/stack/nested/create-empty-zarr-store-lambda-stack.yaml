@@ -1,28 +1,30 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Creates an empty cruise Zarr store
+Description: Initializes an empty cruise-level Zarr store w proper shape and indexing
 
 Parameters:
+  EnvironmentType:
+    Type: String
   DeploymentBucketName:
     Type: String
-  PermissionsBoundary:
+  RolePermissionsBoundary:
+    Description: An optional permissions boundary to associate with roles
     Type: String
-  Timeout:
-    Type: Number
-  MemorySize:
-    Type: Number
   LogRetentionInDays:
     Type: Number
-  DeadLetterTopicArn:
-    Type: String
   Version:
+    Description: Version of the Java Application, e.g. "1.0.0-SNAPSHOT-20230725224017"
     Type: String
-  DoneTopicArn:
-    Type: String
+  MemorySize:
+    Type: Number
+  EphemeralStorageSize:
+    Type: Number
+  Timeout:
+    Type: Number
+  MaxConcurrency:
+    Type: Number
   FileInfoTableArn:
     Type: String
   FileInfoTableName:
-    Type: String
-  TopicArn:
     Type: String
   OutputBucket:
     Type: String
@@ -32,25 +34,31 @@ Parameters:
     Type: String
   OutputBucketUserSecretAccessKeyPsName:
     Type: String
-  MaxConcurrency:
-    Type: Number
+  TopicArn:
+    Type: String
+  DoneTopicArn:
+    Type: String
+  DeadLetterTopicArn:
+    Type: String
+
 
 Conditions:
+  IsProduction:
+    !Equals [ !Ref EnvironmentType, prod ]
   HasPermissionsBoundary:
     Fn::Not:
       - Fn::Equals:
           - ""
-          - !Ref PermissionsBoundary
+          - !Ref RolePermissionsBoundary
 
 Resources:
-
   Role:
     Type: AWS::IAM::Role
     Properties:
       PermissionsBoundary:
         Fn::If:
           - HasPermissionsBoundary
-          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${PermissionsBoundary}
+          - !Sub arn:${AWS::Partition}:iam::${AWS::AccountId}:policy/${RolePermissionsBoundary}
           - AWS::NoValue
       AssumeRolePolicyDocument:
         Version: 2012-10-17
@@ -60,7 +68,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action:
-              - sts:AssumeRole
+              - 'sts:AssumeRole'
       Policies:
         - PolicyName: Logging
           PolicyDocument:
@@ -69,9 +77,9 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
         - PolicyName: DynamoDB
           PolicyDocument:
             Version: 2012-10-17
@@ -80,11 +88,11 @@ Resources:
                 Resource:
                   - !Ref FileInfoTableArn
                 Action:
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:PutItem
-                  - dynamodb:Query
-                  - dynamodb:Scan
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                  - 'dynamodb:PutItem'
+                  - 'dynamodb:Query'
+                  - 'dynamodb:Scan'
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -94,7 +102,25 @@ Resources:
                   - !Ref DeadLetterTopicArn
                   - !Ref DoneTopicArn
                 Action:
-                  - sns:Publish
+                  - 'sns:Publish'
+        - PolicyName: S3
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                  - 's3:PutObjectAcl'
+                  - 's3:GetObject'
+                  - 's3:GetObjectAcl'
+                  - 's3:DeleteObject'
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${OutputBucket}/*
+              - Effect: Allow
+                Action:
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${OutputBucket}
 
   Lambda:
     Type: AWS::Lambda::Function
@@ -112,11 +138,25 @@ Resources:
         Variables:
           OUTPUT_BUCKET: !Ref OutputBucket
           TABLE_NAME: !Ref FileInfoTableName
-          BUCKET_REGION: !Ref OutputBucketRegion
+          BUCKET_REGION: !Ref OutputBucketRegion  # TODO: why do we need this?
           TOPIC_ARN: !Ref DoneTopicArn
+          ### For Python, pass in conditionally ###
+#          OUTPUT_BUCKET_ACCESS_KEY:
+#            Fn::If:
+#              - IsProduction
+#              - !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+#              - ""
+#          OUTPUT_BUCKET_SECRET_ACCESS_KEY:
+#            Fn::If:
+#              - IsProduction
+#              - !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+#              - ""
+          ### For Java, pass in regardless ###
           OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
           OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
           LOG_LEVEL: info
+      EphemeralStorage:
+        Size: !Ref EphemeralStorageSize
 
   LambdaPermission:
     Type: AWS::Lambda::Permission
@@ -210,7 +250,6 @@ Resources:
               ArnEquals:
                 aws:SourceArn:
                   - !GetAtt Lambda.Arn
-
 
 Outputs:
   LambdaArn:
