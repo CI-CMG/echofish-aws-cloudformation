@@ -10,15 +10,18 @@ Parameters:
     Type: String
     Default: ""
   RawSourceBucket:
+    Description: The NOAA NODD bucket where raw EK60 files are archived.
     Type: String
     Default: "noaa-wcsd-pds"
   RawSourceBucketRegion:
     Type: String
     Default: "us-east-1"
   OutputBucketName:
+    Description: In PROD, the NOAA NODD bucket for Zarr store archives. In DEV a test bucket that overwrites this value.
     Type: String
     Default: "noaa-wcsd-zarr-pds"
   OutputBucketRegion:
+    Description: The NOAA NODD bucket is in us-east-1. For DEV this is overwritten.
     Type: String
     Default: "us-east-1"
   CalibrationBucket:
@@ -30,10 +33,10 @@ Parameters:
     Description: Cruise-level calibration data provided by Chuck Anderson.
     Default: "calibrated_cruises.csv"
   StackPrefix:
-    Description: A prefix that identifies this stack
+    Description: A prefix that identifies this stack.
     Type: String
   RolePermissionsBoundary:
-    Description: An optional permissions boundary to associate with roles
+    Description: An optional permissions boundary to associate with roles.
     Type: String
     Default: ""
   LogRetentionInDays:
@@ -41,9 +44,10 @@ Parameters:
     Default: 30
 
   LambdaConcurrency:
+    Description: Used to control all lambda concurrency in the stack.
     Type: Number
     MinValue: 1
-    Default: 5
+    Default: 10
 
   ### [Step 0] Indexing ###
   IndexingLambdaImageTag:
@@ -79,7 +83,8 @@ Parameters:
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230724211819
+#    Default: 1.0.0.dev20230724211819
+    Default: 1.0.0.dev20230816202512
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -111,10 +116,6 @@ Parameters:
     MinValue: 1
     MaxValue: 900
     Default: 240
-#  RawToZarrErrorLambdaConcurrency:
-#    Type: Number
-#    MinValue: 1
-#    Default: 3
 
   ### [Step 3] Zarr Cruise Accumulator ###
   ZarrCruiseAccumulatorLambdaMemorySize:
@@ -129,14 +130,14 @@ Parameters:
     Default: 240
 
   ### [Step 4] Create Empty Zarr Store ### # TODO: "CreateCruiseZarrStoreLambda"
-#  CreateEmptyZarrStoreLambdaImageTag:
-#    Type: String
-#    Default: 1.0.0.dev20230705184439
+  CreateEmptyZarrStoreLambdaImageTag:
+    Type: String
+    Default: 1.0.0.dev20230816200143
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
     MaxValue: 10240
-    Default: 2048
+    Default: 4096
   CreateEmptyZarrStoreLambdaEphemeralStorageSize:
     Type: Number
     MinValue: 512
@@ -146,7 +147,7 @@ Parameters:
     Type: Number
     MinValue: 1
     MaxValue: 900
-    Default: 600
+    Default: 900
   CreateEmptyZarrStoreLambdaConcurrency:
     Type: Number
     MinValue: 1
@@ -155,7 +156,8 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230724172102
+#    Default: 1.0.0.dev20230807191156
+    Default: 1.0.0.dev20230816225614
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -170,7 +172,7 @@ Parameters:
     Type: Number
     MinValue: 1
     MaxValue: 900
-    Default: 600
+    Default: 900
 #  ResampleAndWriteToZarrStoreLambdaConcurrency:
 #    Type: Number
 #    MinValue: 1
@@ -298,12 +300,11 @@ Resources:
   ### [Step 1] Cruise Splitter ###
   # Start the pipeline by prompting this lambda with a json message, e.g.:
   # {"shipName": "Henry_B._Bigelow","cruiseName": "HB0707","sensorName": "EK60"}
+  # aws --profile echofish sns publish --topic-arn "arn:aws:sns:us-west-2:118234403147:rudy-dev-echofish-cruise-splitter" --message '{"shipName":"Henry_B._Bigelow","cruiseName":"HB0707","sensorName":"EK60"}'
   CruiseSplitterLambdaStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       Parameters:
-        EnvironmentType:
-          Fn::ImportValue: !Sub ${StackPrefix}-echofish-environment-type
         DeploymentBucketName:
           Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
         RolePermissionsBoundary: !Ref RolePermissionsBoundary
@@ -345,8 +346,6 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Properties:
       Parameters:
-        EnvironmentType:
-          Fn::ImportValue: !Sub ${StackPrefix}-echofish-environment-type
         RolePermissionsBoundary: !Ref RolePermissionsBoundary
         LogRetentionInDays: !Ref LogRetentionInDays
         ImageTag: !Ref RawToZarrLambdaImageTag
@@ -362,7 +361,7 @@ Resources:
           Fn::GetAtt:
             - DynamoDbStack
             - Outputs.FileInfoTableName
-        RawSourceBucket: !Ref RawSourceBucket
+        InputBucket: !Ref RawSourceBucket
         OutputBucket:
           Fn::GetAtt:
             - BucketStack
@@ -465,17 +464,16 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Properties:
       Parameters:
-        EnvironmentType:
-          Fn::ImportValue: !Sub ${StackPrefix}-echofish-environment-type
-        DeploymentBucketName:
-          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+#        DeploymentBucketName:
+#          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
         RolePermissionsBoundary: !Ref RolePermissionsBoundary
         LogRetentionInDays: !Ref LogRetentionInDays
-        Version: !If [ CreateEmptyZarrStoreLambdaIsRelease, @CreateEmptyZarrStoreLambda.version@, @CreateEmptyZarrStoreLambda.version@@dashTimestamp@ ]
+        ImageTag: !Ref CreateEmptyZarrStoreLambdaImageTag
         MemorySize: !Ref CreateEmptyZarrStoreLambdaMemorySize
         EphemeralStorageSize: !Ref CreateEmptyZarrStoreLambdaEphemeralStorageSize
         Timeout: !Ref CreateEmptyZarrStoreLambdaTimeout
-        MaxConcurrency: !Ref LambdaConcurrency # CreateEmptyZarrStoreLambdaConcurrency
+        MaxConcurrency: !Ref LambdaConcurrency # RawToZarrErrorLambdaConcurrency
+#        Version: !If [ CreateEmptyZarrStoreLambdaIsRelease, @CreateEmptyZarrStoreLambda.version@, @CreateEmptyZarrStoreLambda.version@@dashTimestamp@ ]
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
@@ -484,14 +482,14 @@ Resources:
           Fn::GetAtt:
             - DynamoDbStack
             - Outputs.FileInfoTableName
-        OutputBucket:
+        OutputBucket:  # TODO: change to "OutputBucketName"
           Fn::GetAtt:
             - BucketStack
             - Outputs.OutputBucketName
-        OutputBucketRegion:
-          Fn::GetAtt:
-            - BucketStack
-            - Outputs.OutputBucketRegion
+#        OutputBucketRegion:
+#          Fn::GetAtt:
+#            - BucketStack
+#            - Outputs.OutputBucketRegion
         OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
         OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
         TopicArn:
@@ -517,8 +515,6 @@ Resources:
     Type: AWS::CloudFormation::Stack
     Properties:
       Parameters:
-        EnvironmentType:
-          Fn::ImportValue: !Sub ${StackPrefix}-echofish-environment-type
         RolePermissionsBoundary: !Ref RolePermissionsBoundary
         LogRetentionInDays: !Ref LogRetentionInDays
         ImageTag: !Ref ResampleAndWriteToZarrStoreLambdaImageTag
@@ -557,5 +553,185 @@ Resources:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/resample-and-write-to-zarr-store-lambda-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  # https://github.com/CI-CMG/echofish-aws-cloudformation/blob/58096e7db908a47600f9df2204cefa1ff30642f0/echofish-aws-cloudformation/src/cloudformation/stack/dynamic/raw2zarr-ec2.yaml
+#  EC2Instance:
+#    Type: AWS::EC2::Instance
+#    Metadata:
+#      AWS::CloudFormation::Init:
+#        configSets:
+#          default:
+#            - setup
+#            - run
+#        setup:
+#          packages:
+#            yum:
+#              awslogs: [ ]
+#              docker: [ ]
+#          files:
+#            '/docker.tar.gz':
+#              source: !Sub s3://${DeploymentBucketName}/docker/echofish-aws-raw2zarr-${Version}-docker.tar.gz
+#              mode: '000644'
+#              owner: root
+#              group: root
+#            '/etc/awslogs/awscli.conf':
+#              content: !Sub |
+#                [default]
+#                region = ${AWS::Region}
+#                [plugins]
+#                cwlogs = cwlogs
+#              mode: '000644'
+#              owner: root
+#              group: root
+#            '/etc/awslogs/awslogs.conf':
+#              content: !Sub |
+#                [general]
+#                state_file = /var/lib/awslogs/agent-state
+#                [/var/log/dmesg]
+#                file = /var/log/dmesg
+#                log_stream_name = ${AWS::StackName}/{instance_id}/var/log/dmesg
+#                log_group_name = ${EC2LogGroup}
+#                [/var/log/messages]
+#                datetime_format = %b %d %H:%M:%S
+#                file = /var/log/messages
+#                log_stream_name = ${AWS::StackName}/{instance_id}/var/log/messages
+#                log_group_name = ${EC2LogGroup}
+#                [/var/log/secure]
+#                datetime_format = %b %d %H:%M:%S
+#                file = /var/log/secure
+#                log_stream_name = ${AWS::StackName}/{instance_id}/var/log/secure
+#                log_group_name = ${EC2LogGroup}
+#                [/var/log/cron]
+#                datetime_format = %b %d %H:%M:%S
+#                file = /var/log/cron
+#                log_stream_name = ${AWS::StackName}/{instance_id}/var/log/cron
+#                log_group_name = ${EC2LogGroup}
+#                [/var/log/cfn-init.log]
+#                datetime_format = %Y-%m-%d %H:%M:%S
+#                file = /var/log/cfn-init.log
+#                log_stream_name = ${AWS::StackName}/{instance_id}/var/log/cfn-init.log
+#                log_group_name = ${EC2LogGroup}
+#                [/var/log/cfn-hup.log]
+#                datetime_format = %Y-%m-%d %H:%M:%S
+#                file = /var/log/cfn-hup.log
+#                log_stream_name = ${AWS::StackName}/{instance_id}/var/log/cfn-hup.log
+#                log_group_name = ${EC2LogGroup}
+#                [/var/log/cfn-init-cmd.log]
+#                datetime_format = %Y-%m-%d %H:%M:%S
+#                file = /var/log/cfn-init-cmd.log
+#                log_stream_name = ${AWS::StackName}/{instance_id}/var/log/cfn-init-cmd.log
+#                log_group_name = ${EC2LogGroup}
+#                [/var/log/cloud-init-output.log]
+#                file = /var/log/cloud-init-output.log
+#                log_stream_name = ${AWS::StackName}/{instance_id}/var/log/cloud-init-output.log
+#                log_group_name = ${EC2LogGroup}
+#                [/application/log/application.log]
+#                file = /application/log/application.log
+#                log_stream_name = ${AWS::StackName}/{instance_id}/application/log/application.log
+#                log_group_name = ${EC2LogGroup}
+#              mode: '000644'
+#              owner: root
+#              group: root
+#            '/etc/cfn/cfn-hup.conf':
+#              content: !Sub |
+#                [main]
+#                stack=${AWS::StackId}
+#                region=${AWS::Region}
+#                interval=1
+#              mode: '000400'
+#              owner: root
+#              group: root
+#            '/etc/cfn/hooks.d/cfn-auto-reloader.conf':
+#              content: !Sub |
+#                [cfn-auto-reloader-hook]
+#                triggers=post.update
+#                path=Resources.EC2Instance.Metadata.AWS::CloudFormation::Init
+#                action=/opt/aws/bin/cfn-init --verbose --stack=${AWS::StackName} --region=${AWS::Region} --resource=EC2Instance
+#                runas=root
+#            '/run.sh':
+#              content: !Sub |
+#                set -ex
+#                docker load -i /docker.tar.gz
+#                docker run -d \
+#                  -v $HOME/.aws:/root/.aws \
+#                  -e ECHOFISH_SQSARN \
+#                  -e ECHOFISH_SOURCEBUCKET \
+#                  -e ECHOFISH_TARGETBUCKET \
+#                  -e ECHOFISH_ECHOPYPETIMEOUT \
+#                  -e ECHOFISH_QUIETPERIODMS \
+#                  -e ECHOFISH_STACKNAME \
+#                  -e ECHOFISH_MAXCONCURRENTUPLOADSPERCONSUMER \
+#                  -e ECHOFISH_CONCURRENTCONSUMERS \
+#                  -v /application/log:/application/log \
+#                  cirescmg/echofish-aws-raw2zarr:${Version}
+#                while [ ${docker inspect -f {{.State.Health.Status}} mvtgen} != healthy ]
+#                do
+#                  sleep 2
+#                done
+#              mode: '000744'
+#              owner: root
+#              group: root
+#          services:
+#            sysvinit:
+#              docker:
+#                enabled: true
+#                ensureRunning: true
+#                packages:
+#                  yum:
+#                    - docker
+#              awslogs:
+#                enabled: true
+#                ensureRunning: true
+#                packages:
+#                  yum:
+#                    - awslogs
+#                files:
+#                  - '/etc/awslogs/awslogs.conf'
+#                  - '/etc/awslogs/awscli.conf'
+#              cfn-hup:
+#                enabled: true
+#                ensureRunning: true
+#                files:
+#                  - '/etc/cfn/cfn-hup.conf'
+#                  - '/etc/cfn/hooks.d/cfn-auto-reloader.conf'
+#        run:
+#          commands:
+#            "01":
+#              env:
+#                ECHOFISH_SQSARN: !Ref SQSARN
+#                ECHOFISH_SOURCEBUCKET: !Ref SOURCEBUCKET
+#                ECHOFISH_TARGETBUCKET: !Ref TARGETBUCKET
+#                ECHOFISH_ECHOPYPETIMEOUT: !Ref ECHOPYPETIMEOUT
+#                ECHOFISH_STACKNAME: !Ref AWS::StackName
+#                ECHOFISH_QUIETPERIODMS: !Ref QUIETPERIODMS
+#                ECHOFISH_MAXCONCURRENTUPLOADSPERCONSUMER: !Ref MAXCONCURRENTUPLOADSPERCONSUMER
+#                ECHOFISH_CONCURRENTCONSUMERS: !Ref CONCURRENTCONSUMERS
+#              command: /run.sh
+#    CreationPolicy:
+#      ResourceSignal:
+#        Timeout: PT10M
+#    Properties:
+#      EbsOptimized: false
+#      IamInstanceProfile: !Ref EC2InstanceProfile
+#      ImageId: !Ref ImageId
+#      InstanceType: !Ref InstanceType
+#      BlockDeviceMappings:
+#        - DeviceName: /dev/xvda
+#          Ebs:
+#            DeleteOnTermination: true
+#            VolumeSize: !Ref VolumeSizeGB
+#            VolumeType: gp2
+#      UserData:
+#        Fn::Base64: !Sub |
+#          #!/bin/bash -x
+#          # Use the line below to ensure the CloudFormation helper scripts are updated to the latest version
+#          # Per: http://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/cfn-helper-scripts-reference.html
+#          yum install -y aws-cfn-bootstrap
+#          retVal=$?
+#          if [ $retVal = 0 ]; then
+#              /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource EC2Instance --region ${AWS::Region}
+#              retVal=$?
+#          fi
+#          /opt/aws/bin/cfn-signal -e $retVal --stack ${AWS::StackName} --region ${AWS::Region} --resource=EC2Instance
 
 

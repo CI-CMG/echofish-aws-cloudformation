@@ -73,6 +73,7 @@ def download_raw_file(
         Config=TransferConfig(max_concurrency=MAX_CONCURRENCY)
     )
 
+# if i have nodd credentials i can't pass in keys
 
 #####################################################################
 def chunked(

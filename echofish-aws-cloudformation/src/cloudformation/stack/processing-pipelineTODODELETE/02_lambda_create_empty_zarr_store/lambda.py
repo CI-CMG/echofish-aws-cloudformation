@@ -418,6 +418,7 @@ def get_table_as_dataframe(
     dynamodb = session.resource(service_name='dynamodb')
     try:
         table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
+        table_name = 'rudy-dev-echofish-EchoFish-File-Info'
         table = dynamodb.Table(table_name)
         # Note: table.scan() has 1 MB limit on results so pagination is used.
         response = table.scan()
@@ -429,13 +430,14 @@ def get_table_as_dataframe(
         print('Problem finding the dynamodb table')
         raise err
     df = pd.DataFrame(data)
-    assert(
-        not np.any(df['PIPELINE_STATUS'] == PIPELINE_STATUS.PROCESSING.value)
-    ), f"None of the PIPELINE_STATUS fields should still be {PIPELINE_STATUS.PROCESSING.value}."
-    df_success = df[df['PIPELINE_STATUS'] == PIPELINE_STATUS.SUCCESS.value]
-    if df_success.shape[0] == 0:
+    # assert(
+    #     not np.any(df['PIPELINE_STATUS'] == PIPELINE_STATUS.PROCESSING.value)
+    # ), f"None of the PIPELINE_STATUS fields should still be {PIPELINE_STATUS.PROCESSING.value}."
+    df = df[df['PIPELINE_STATUS'] != 'FAILURE']
+    df = df[df['PIPELINE_STATUS'] != 'PROCESSING']
+    if df.shape[0] == 0:
         raise
-    return df_success.sort_values(by='START_TIME', ignore_index=True)
+    return df.sort_values(by='START_TIME', ignore_index=True)
 
 
 def get_file_count(

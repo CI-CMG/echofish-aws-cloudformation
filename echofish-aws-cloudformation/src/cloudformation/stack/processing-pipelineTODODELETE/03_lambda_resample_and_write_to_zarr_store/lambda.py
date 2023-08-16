@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-
 # https://github.com/oftfrfbf/watercolumn/blob/master/scripts/zarr_upsample.py
 
 import os
+import json
 import boto3
 # import logging
 from typing import Union
@@ -80,7 +80,8 @@ def get_table_as_dataframe(
     session = boto3.Session()
     dynamodb = session.resource(service_name='dynamodb')
     try:
-        table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
+        table_name = "rudy-dev-echofish-EchoFish-File-Info"
+        #table_name = f"{prefix}_{ship_name}_{cruise_name}_{sensor_name}"
         table = dynamodb.Table(table_name)
         # Note: table.scan() has 1 MB limit on results so pagination is used.
         response = table.scan()
@@ -92,10 +93,10 @@ def get_table_as_dataframe(
         print('Problem finding the dynamodb table')
         raise err
     df = pd.DataFrame(data)
-    assert( #
-        np.all(df['PIPELINE_STATUS'] == PIPELINE_STATUS.SUCCESS.value)
-    ), "None of the status fields should still be processing."
-    df_success = df[df['PIPELINE_STATUS'] == PIPELINE_STATUS.SUCCESS.value]
+    # assert( #
+    #     np.all(df['PIPELINE_STATUS'] == PIPELINE_STATUS.SUCCESS.value)
+    # ), "None of the status fields should still be processing."
+    df_success = df[df['PIPELINE_STATUS'] == "POPULATING_CRUISE_ZARR"]
     if df_success.shape[0] == 0:
         raise
     return df_success.sort_values(by='START_TIME', ignore_index=True)
@@ -167,24 +168,24 @@ def s3_zarr_as_xr(s3_zarr_store_path: str) -> xr.core.dataset.Dataset:
     )
     store = s3fs.S3Map(root=s3_zarr_store_path, s3=s3_fs, check=True)
     # You are already using dask, this is assumed by open_zarr, not the same as open_dataset(engine=“zarr”)
-    import fsspec
-
+    # import fsspec
     return xr.open_zarr(store=store, consolidated=None) # synchronizer=SYNCHRONIZER
 
+
 def read_s3_geo_json(
-        s3_geo_json_path: str,
-        access_key_id: str = None,
-        secret_access_key: str = None,
+        bucket_name='',
+        key='',
 ) -> str:
     # reads geojson file from s3 bucket w boto3
-    session = boto3.Session()
+    # session = boto3.Session()
     s3 = boto3.resource(
         service_name='s3',
-        aws_access_key_id=access_key_id,
-        aws_secret_access_key=secret_access_key,
+        aws_access_key_id=os.getenv('ACCESS_KEY_ID'), #access_key_id,
+        aws_secret_access_key=os.getenv('SECRET_ACCESS_KEY') # secret_access_key,
     )
     # s3_geo_json_path=f's3://{input_zarr_bucket}/{input_zarr_path}/geo.json'
-    content_object = s3.Object(input_zarr_bucket, f'{input_zarr_path}/geo.json')
+    os.getenv('SECRET_ACCESS_KEY')
+    content_object = s3.Object(bucket_name=bucket_name, key=key)
     file_content = content_object.get()['Body'].read().decode('utf-8')
     json_content = json.loads(file_content)
     return json_content
@@ -192,24 +193,30 @@ def read_s3_geo_json(
 
 
 def s3_zarr(
-        output_zarr_bucket: str,
-        ship_name: str,
-        cruise_name: str,
-        sensor_name: str,
-        # zarr_synchronizer: Union[str, None] = None,
+        bucket_name: str="noaa-wcsd-zarr-pds",
+        bucket_name: str="rudy-dev-echofish-118234403147-echofish-dev-output",
+        ship_name: str="Henry_B._Bigelow",
+        cruise_name: str="HB0707",
+        sensor_name: str="EK60",
 ):
     # Environment variables are optional parameters
     s3 = s3fs.S3FileSystem(
         key=os.getenv('ACCESS_KEY_ID'),
         secret=os.getenv('SECRET_ACCESS_KEY'),
     )
-    root = f's3://{output_zarr_bucket}/level_2/{ship_name}/{cruise_name}/{sensor_name}/{cruise_name}.zarr'
+    # root = f's3://{output_zarr_bucket}/level_2/{ship_name}/{cruise_name}/{sensor_name}/{cruise_name}.zarr'
+    # root = "s3://rudy-dev-echofish-118234403147-echofish-dev-output/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr"
+    # root = f's3://{output_zarr_bucket}/level_2/Henry_B._Bigelow/HB0707/EK60/HB0707.zarr'
+    root = f'{bucket_name}/level_2/{ship_name}/{cruise_name}/{sensor_name}/{cruise_name}.zarr'
     # TODO: check if directory exists
-    store = s3fs.S3Map(root=root, s3=s3, check=True)
+    # s3fs.__version__ == '0.4.2'
+    # store = s3fs.S3Map(root=root, s3=s3, check=False)
     # TODO: properly synchronize with efs mount
     # TODO: zarr.ThreadSynchronizer()
     # Note: 'r+' means read/write (store must already exist)
-    cruise_zarr = zarr.open(store=store, mode="r+") #, zarr_synchronizer=zarr_synchronizer)
+    # TODO: for some reason zarr.open isn't working with current versions
+    # cruise_zarr = zarr.open(store=store, mode="r+") #, zarr_synchronizer=zarr_synchronizer)
+    cruise_zarr = zarr.open_consolidated(f's3://{root}', mode='r+')
     return cruise_zarr
 
 
@@ -301,7 +308,7 @@ def main(
     ship_name: str = 'Henry_B._Bigelow',
     cruise_name: str = 'HB0707',
     sensor_name: str = 'EK60',
-    input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.zarr',
+    input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T004447.zarr',
     # input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070711-T182032.zarr'
     # input_zarr_path: str = 'level_1/Henry_B._Bigelow/HB0707/EK60/D20070712-T152416.zarr'
     # zarr_synchronizer: Union[str, None] = None,
@@ -366,9 +373,8 @@ def main(
         s3_zarr_store_path=f's3://{input_zarr_bucket}/{input_zarr_path}'
     )
     geo_json = read_s3_geo_json(
-        s3_geo_json_path=f's3://{input_zarr_bucket}/{input_zarr_path}/geo.json',
-        access_key_id=os.getenv('ACCESS_KEY_ID'),
-        secret_access_key=os.getenv('SECRET_ACCESS_KEY'),
+        bucket_name=input_zarr_bucket,
+        key=f'{input_zarr_path}/geo.json'
     )
     #geo_json['features'][0]
     # {'id': '2007-07-12T15:24:16.032000000', 'type': 'Feature', 'properties': {'latitude': None, 'longitude': None}, 'geometry': None}
@@ -385,11 +391,11 @@ def main(
     # [2] open cruise level zarr store for writing
     # output_zarr_path: str = f'',
     cruise_zarr = s3_zarr(
-        output_zarr_bucket,
-        ship_name,
-        cruise_name,
-        sensor_name,
-        # zarr_synchronizer
+        # output_zarr_bucket,
+        bucket_name=input_zarr_bucket,
+        ship_name=ship_name,
+        cruise_name=cruise_name,
+        sensor_name=sensor_name,
     )
     #########################################################################
     # [3] Get needed indices
@@ -421,7 +427,7 @@ def main(
     filename = os.path.basename(input_zarr_path)
     all_Sv_prototype = interpolate_data(
         minimum_resolution = np.nanmin(np.float32(df['MIN_ECHO_RANGE'])),
-        maximum_cruise_depth_meters = np.max(np.float32(df['MAX_ECHO_RANGE'])),
+        maximum_cruise_depth_meters = np.nanmax(np.float32(df['MAX_ECHO_RANGE'])),
         # num_ping_time_dropna = int(df.iloc[index]['NUM_PING_TIME_DROPNA']),
         file_xr=file_xr,
         cruise_zarr=cruise_zarr,

@@ -11,7 +11,7 @@ Parameters:
   EnvironmentType:
     Description: The deployment environment type
     Type: String
-    Default: dev
+    Default: prod
     AllowedValues:
       - prod
       - dev

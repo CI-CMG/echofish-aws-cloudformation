@@ -2,8 +2,6 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: Read file-level Zarr store, resample, and write to cruise-level Zarr store
 
 Parameters:
-  EnvironmentType:
-    Type: String
   RolePermissionsBoundary:
     Description: An optional permissions boundary to associate with roles
     Type: String
@@ -25,7 +23,7 @@ Parameters:
     Type: String
   FileInfoTableName:
     Type: String
-  OutputBucket:
+  OutputBucket:  # TODO: change to "OutputBucketName"
     Type: String
   OutputBucketUserAccessKeyPsName:
     Type: String
@@ -39,8 +37,6 @@ Parameters:
     Type: String
 
 Conditions:
-  IsProduction:
-    !Equals [ !Ref EnvironmentType, prod ]
   HasPermissionsBoundary:
     Fn::Not:
       - Fn::Equals:
@@ -100,17 +96,13 @@ Resources:
                   - !Ref DoneTopicArn
                 Action:
                   - 'sns:Publish'
-        - PolicyName: S3
+        - PolicyName: S3  # TODO: do we need these credentials?
           PolicyDocument:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
-                  - 's3:PutObject'
-                  - 's3:PutObjectAcl'
-                  - 's3:GetObject'
-                  - 's3:GetObjectAcl'
-                  - 's3:DeleteObject'
+                  - 's3:*Object*'
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${OutputBucket}/*
 
@@ -124,20 +116,13 @@ Resources:
       Timeout: !Ref Timeout
       ReservedConcurrentExecutions: !Ref MaxConcurrency
       Role: !GetAtt LambdaRole.Arn
+#      FileSystemConfigs: # TODO
       Environment:
         Variables:
           TABLE_NAME: !Ref FileInfoTableName
           OUTPUT_BUCKET: !Ref OutputBucket
-          OUTPUT_BUCKET_ACCESS_KEY:
-            Fn::If:
-              - IsProduction
-              - !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
-              - ""
-          OUTPUT_BUCKET_SECRET_ACCESS_KEY:
-            Fn::If:
-              - IsProduction
-              - !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
-              - ""
+          OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+          OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
           TOPIC_ARN: !Ref DoneTopicArn
       EphemeralStorage:
         Size: !Ref EphemeralStorageSize

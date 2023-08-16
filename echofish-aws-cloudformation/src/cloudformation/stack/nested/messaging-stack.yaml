@@ -138,29 +138,35 @@ Outputs:
     Value: !Ref IndexLambdaTopic
   IndexDeadLetterTopicArn:
     Value: !Ref IndexDeadLetterTopic
+
   ### [Step 1] Cruise Splitter ###
   CruiseSplitterLambdaTopicArn:
     Value: !Ref CruiseSplitterLambdaTopic
   CruiseSplitterDeadLetterTopicArn:
     Value: !Ref CruiseSplitterDeadLetterTopic
+
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaTopicArn:
     Value: !Ref RawToZarrLambdaTopic
   RawToZarrDeadLetterTopicArn:
     Value: !Ref RawToZarrDeadLetterTopic
+
   ### [Step 3] Zarr Cruise Accumulator ###
   ZarrCruiseAccumulatorLambdaTopicArn:
     Value: !Ref ZarrCruiseAccumulatorLambdaTopic
   ZarrCruiseAccumulatorDeadLetterTopicArn:
     Value: !Ref ZarrCruiseAccumulatorDeadLetterTopic
+
   ### [Step 4] Create Empty Zarr Store ###
   CreateEmptyZarrStoreLambdaTopicArn:
     Value: !Ref CreateEmptyZarrStoreLambdaTopic
+
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaTopicArn:
     Value: !Ref ResampleAndWriteToZarrStoreLambdaTopic
   ResampleAndWriteToZarrStoreDeadLetterTopicArn:
     Value: !Ref ResampleAndWriteToZarrStoreDeadLetterTopic
+
   ### Finished ###
   ProcessingFinishedTopicArn:
     Value: !Ref ProcessingFinishedTopic

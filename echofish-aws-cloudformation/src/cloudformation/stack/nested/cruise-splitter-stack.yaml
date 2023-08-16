@@ -2,8 +2,6 @@ AWSTemplateFormatVersion: 2010-09-09
 Description: Triggers event for each file in a cruise
 
 Parameters:
-  EnvironmentType:
-    Type: String
   DeploymentBucketName:
     Type: String
   RolePermissionsBoundary:
@@ -35,8 +33,6 @@ Parameters:
 
 
 Conditions:
-  IsProduction:
-    !Equals [ !Ref EnvironmentType, prod ]
   HasPermissionsBoundary:
     Fn::Not:
       - Fn::Equals:
