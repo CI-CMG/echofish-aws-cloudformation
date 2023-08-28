@@ -184,6 +184,53 @@ Parameters:
 #    MinValue: 1
 #    Default: 3
 
+  ### [Step 6] Generate MVT ###
+  Zarr2MvtLambdaTimeout:
+    Description: The timeout in seconds for the Zarr to MVT lambda
+    Type: Number
+    MinValue: 10
+    MaxValue: 900
+    Default: 900
+  Zarr2MvtLambdaMemorySize:
+    Description: The amount of memory for the Zarr to MVT lambda
+    Type: Number
+    MinValue: 256
+    MaxValue: 10240
+    Default: 4096
+  MvtTracklineSplitMs:
+    Description: The minimum milliseconds to split a trackline
+    Type: Number
+    MinValue: 0
+    Default: 900000
+  MvtBatchSize:
+    Description: The maximum number of points to keep in memory when processing MVTs
+    Type: Number
+    MinValue: 10
+    Default: 10000
+  MvtTracklinePrecision:
+    Description: The number of decimal points allowed when calculating MVTs
+    Type: Number
+    MinValue: 1
+    Default: 5
+  MvtMaxZoomLevel:
+    Description: The maximum zoom level that MVTs are generated for
+    Type: Number
+    MinValue: 5
+    Default: 10
+  MvtTracklineMinSimplificationTolerance:
+    Description: The minimum simplification tolerance when generating MVTs
+    Type: Number
+    Default: 0.00001
+  MvtTracklineMaxSimplificationTolerance:
+    Description: The maximum simplification tolerance when generating MVTs
+    Type: Number
+    Default: 0.01
+  MvtUploadBuffers:
+    Description: The maximum sets of batches to keep in memory when uploading MVTs
+    Type: Number
+    MinValue: 1
+    Default: 2
+
 Conditions:
   CruiseSplitterLambdaIsRelease:
     Fn::Equals:
@@ -225,6 +272,14 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @CreateEmptyZarrStoreLambda.version@
+  Zarr2MvtLambdaIsRelease:
+    Fn::Equals:
+      - @Zarr2MvtLambda.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @Zarr2MvtLambda.version@
 
 Resources:
   DynamoDbStack:
@@ -560,6 +615,46 @@ Resources:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/resample-and-write-to-zarr-store-lambda-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+#  Zarr2MvtStack:
+#    Type: AWS::CloudFormation::Stack
+#    Properties:
+#      Parameters:
+#        MvtTracklineSplitMs: !Ref MvtTracklineSplitMs
+#        MvtBatchSize: !Ref MvtBatchSize
+#        MvtTracklinePrecision: !Ref MvtTracklinePrecision
+#        MvtMaxZoomLevel: !Ref MvtMaxZoomLevel
+#        MvtTracklineMinSimplificationTolerance: !Ref MvtTracklineMinSimplificationTolerance
+#        MvtTracklineMaxSimplificationTolerance: !Ref MvtTracklineMaxSimplificationTolerance
+#        MvtUploadBuffers: !Ref MvtUploadBuffers
+##        DeploymentBucketName:
+##          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+#        LambdaRolePermissionsBoundary: !Ref RolePermissionsBoundary
+#        Zarr2MvtLambdaTimeout: !Ref Zarr2MvtLambdaTimeout
+#        Zarr2MvtLambdaMemorySize: !Ref Zarr2MvtLambdaMemorySize
+#        ZarrStoreBucketName:
+#          Fn::GetAtt:
+#            - BucketStack
+#            - Outputs.OutputBucketName
+#        MvtBucketName:
+#          Fn::GetAtt:
+#            - BucketStack
+#            - Outputs.MvtBucketName
+#        LogRetentionInDays: !Ref LogRetentionInDays
+##        DeadLetterTopicArn:
+##          Fn::GetAtt:
+##            - MessagingStack
+##            - Outputs.ResampleAndWriteToZarrStoreDeadLetterTopicArn
+#        Version: !If [ Zarr2MvtLambdaIsRelease, @Zarr2MvtLambda.version@, @Zarr2MvtLambda.version@@dashTimestamp@ ]
+##        MvtDoneTopicArn:
+##          Fn::GetAtt:
+##            - TopicStack
+##            - Outputs.MvtDoneTopicArn
+#      TemplateURL:
+#        Fn::Sub:
+#          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2mvt-stack.yaml
+#          - DeploymentBucketName:
+#              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
   # https://github.com/CI-CMG/echofish-aws-cloudformation/blob/58096e7db908a47600f9df2204cefa1ff30642f0/echofish-aws-cloudformation/src/cloudformation/stack/dynamic/raw2zarr-ec2.yaml
 #  EC2Instance:
