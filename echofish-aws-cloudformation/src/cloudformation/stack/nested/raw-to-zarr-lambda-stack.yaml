@@ -19,6 +19,8 @@ Parameters:
     Type: Number
   MaxConcurrency:
     Type: Number
+  OverwriteExistingZarrStore:
+    Type: String
   FileInfoTableArn:
     Type: String
   FileInfoTableName:
@@ -139,6 +141,7 @@ Resources:
           OUTPUT_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
           OUTPUT_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
           TOPIC_ARN: !Ref DoneTopicArn
+          OVERWRITE_EXISTING_ZARR_STORE: !Ref OverwriteExistingZarrStore
       EphemeralStorage:
         Size: !Ref EphemeralStorageSize
 
