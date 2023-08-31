@@ -35,6 +35,11 @@ Parameters:
   StackPrefix:
     Description: A prefix that identifies this stack.
     Type: String
+  DataManagerEmail:
+    Description: The email which will receive final notification of the pipeline status.
+    Type: String
+    Default: "rudyklucik@noaa.gov"
+# TODO: see if we can feed in a list of emails?
   RolePermissionsBoundary:
     Description: An optional permissions boundary to associate with roles.
     Type: String
@@ -52,7 +57,7 @@ Parameters:
   ### [Step 0] Indexing ###
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230706165704
+    Default: 1.0.0.dev20230828212128
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -70,6 +75,11 @@ Parameters:
     MinValue: 128
     MaxValue: 10240
     Default: 1024
+  CruiseSplitterLambdaEphemeralStorageSize:
+    Type: Number
+    MinValue: 512
+    MaxValue: 10240
+    Default: 512
   CruiseSplitterLambdaTimeout:
     Type: Number
     MinValue: 1
@@ -83,14 +93,7 @@ Parameters:
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230828170908
-  RawToZarrLambdaOverwriteExistingZarrStore:
-    Type: String
-    Default: "False"
-    AllowedValues:
-      - "False"
-      - "True"
-    Description: "For False, if a Zarr store already exists in the output bucket, dont overwrite it"
+    Default: 1.0.0.dev20230831205745
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -129,6 +132,11 @@ Parameters:
     MinValue: 128
     MaxValue: 10240
     Default: 512  # TODO: can this be less?
+  ZarrCruiseAccumulatorLambdaEphemeralStorageSize:
+    Type: Number
+    MinValue: 512
+    MaxValue: 10240
+    Default: 512
   ZarrCruiseAccumulatorLambdaTimeout:
     Type: Number
     MinValue: 1
@@ -138,7 +146,7 @@ Parameters:
   ### [Step 4] Create Empty Zarr Store ### # TODO: "CreateCruiseZarrStoreLambda"
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230816200143
+    Default: 1.0.0.dev20230828232015
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -158,12 +166,18 @@ Parameters:
     Type: Number
     MinValue: 1
     Default: 3
+#  CreateEmptyZarrStoreLambdaOverwriteExistingZarrStore:
+#    Type: String
+#    Default: "False"
+#    AllowedValues:
+#      - "False"
+#      - "True"
+#    Description: "For False, if a Zarr store already exists in the output bucket, dont overwrite it"
 
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-#    Default: 1.0.0.dev20230807191156
-    Default: 1.0.0.dev20230816225614
+    Default: 1.0.0.dev20230829214247
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -183,6 +197,30 @@ Parameters:
 #    Type: Number
 #    MinValue: 1
 #    Default: 3
+
+  ### [Step 6] Aggregator ###
+  AggregatorLambdaImageTag:
+    Type: String
+    Default: 1.0.0.dev20230831204026
+  AggregatorLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 128
+  AggregatorLambdaEphemeralStorageSize:
+    Type: Number
+    MinValue: 512
+    MaxValue: 10240
+    Default: 512
+  AggregatorLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 30
+  AggregatorLambdaConcurrency:
+    Type: Number
+    MinValue: 1
+    Default: 1
 
   ### [Step 6] Generate MVT ###
   Zarr2MvtLambdaTimeout:
@@ -248,14 +286,6 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @ZarrCruiseAccumulatorLambda.version@
-#  RawToZarrErrorLambdaIsRelease:
-#    Fn::Equals:
-#      - @RawToZarrErrorLambda.version@
-#      - Fn::Join:
-#          - ""
-#          - Fn::Split:
-#              - "-SNAPSHOT"
-#              - @RawToZarrErrorLambda.version@
   BucketDrainLambdaIsRelease:
     Fn::Equals:
       - @CruiseSplitterLambda.version@
@@ -298,6 +328,7 @@ Resources:
     Properties:
       Parameters:
         StackPrefix: !Ref StackPrefix
+        DataManagerEmail: !Ref DataManagerEmail
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/messaging-stack.yaml
@@ -359,9 +390,6 @@ Resources:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
   ### [Step 1] Cruise Splitter ###
-  # Start the pipeline by prompting this lambda with a json message, e.g.:
-  # {"shipName": "Henry_B._Bigelow","cruiseName": "HB0707","sensorName": "EK60"}
-  # aws --profile echofish sns publish --topic-arn "arn:aws:sns:us-west-2:118234403147:rudy-dev-echofish-cruise-splitter" --message '{"shipName":"Henry_B._Bigelow","cruiseName":"HB0707","sensorName":"EK60"}'
   CruiseSplitterLambdaStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -372,6 +400,7 @@ Resources:
         LogRetentionInDays: !Ref LogRetentionInDays
         Version: !If [CruiseSplitterLambdaIsRelease, @CruiseSplitterLambda.version@, @CruiseSplitterLambda.version@@dashTimestamp@]
         MemorySize: !Ref CruiseSplitterLambdaMemorySize
+        EphemeralStorageSize: !Ref CruiseSplitterLambdaEphemeralStorageSize
         Timeout: !Ref CruiseSplitterLambdaTimeout
         MaxConcurrency: !Ref LambdaConcurrency # CruiseSplitterLambdaConcurrency
         FileInfoTableArn:
@@ -414,7 +443,6 @@ Resources:
         EphemeralStorageSize: !Ref RawToZarrLambdaEphemeralStorageSize
         Timeout: !Ref RawToZarrLambdaTimeout
         MaxConcurrency: !Ref LambdaConcurrency
-        OverwriteExistingZarrStore: !Ref RawToZarrLambdaOverwriteExistingZarrStore
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
@@ -447,6 +475,53 @@ Resources:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-lambda-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  ## [Step 2b] Raw to Zarr Error Handler ###
+  # Note: this lambda catches failures from raw-to-zarr and processes them into queue
+  RawToZarrErrorLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        RolePermissionsBoundary: !Ref RolePermissionsBoundary
+        LogRetentionInDays: !Ref LogRetentionInDays
+        ImageTag: !Ref RawToZarrLambdaImageTag
+        MemorySize: !Ref RawToZarrLambdaMemorySize
+        EphemeralStorageSize: !Ref RawToZarrLambdaEphemeralStorageSize
+        Timeout: !Ref RawToZarrLambdaTimeout
+        MaxConcurrency: !Ref LambdaConcurrency
+        FileInfoTableArn:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableArn
+        FileInfoTableName:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableName
+        InputBucket: !Ref RawSourceBucket
+        OutputBucket:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.OutputBucketName
+        OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
+        OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
+        TopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.RawToZarrLambdaTopicArn
+        DoneTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.ZarrCruiseAccumulatorLambdaTopicArn
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.RawToZarrDeadLetterTopicArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-lambda-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
 
   ### [Step 2b] Raw to Zarr Error Handler ###
 #  RawToZarrErrorLambdaStack:
@@ -493,6 +568,7 @@ Resources:
         RolePermissionsBoundary: !Ref RolePermissionsBoundary
         Timeout: !Ref ZarrCruiseAccumulatorLambdaTimeout
         MemorySize: !Ref ZarrCruiseAccumulatorLambdaMemorySize
+        EphemeralStorageSize: !Ref ZarrCruiseAccumulatorLambdaEphemeralStorageSize
         LogRetentionInDays: !Ref LogRetentionInDays
         Version: !If [ ZarrCruiseAccumulatorLambdaIsRelease, @ZarrCruiseAccumulatorLambda.version@, @ZarrCruiseAccumulatorLambda.version@@dashTimestamp@ ]
         FileInfoTableArn:
@@ -615,6 +691,45 @@ Resources:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/resample-and-write-to-zarr-store-lambda-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  ### [Step 6] Aggregate and email ###
+  AggregatorLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        RolePermissionsBoundary: !Ref RolePermissionsBoundary
+        LogRetentionInDays: !Ref LogRetentionInDays
+        ImageTag: !Ref AggregatorLambdaImageTag
+        MemorySize: !Ref AggregatorLambdaMemorySize
+        EphemeralStorageSize: !Ref AggregatorLambdaEphemeralStorageSize
+        Timeout: !Ref AggregatorLambdaTimeout
+        MaxConcurrency: !Ref AggregatorLambdaConcurrency
+        FileInfoTableArn:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableArn
+        FileInfoTableName:
+          Fn::GetAtt:
+            - DynamoDbStack
+            - Outputs.FileInfoTableName
+        TopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.ProcessingFinishedTopicArn
+        DoneTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.EmailDataManagerTopicArn # TODO: this
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.ProcessingFinishedDeadLetterTopicArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/aggregator-lambda-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
 
 #  Zarr2MvtStack:
 #    Type: AWS::CloudFormation::Stack

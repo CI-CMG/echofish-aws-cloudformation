@@ -12,6 +12,8 @@ Parameters:
     Type: String
   MemorySize:
     Type: Number
+  EphemeralStorageSize:
+    Type: Number
   Timeout:
     Type: Number
   MaxConcurrency:
@@ -120,6 +122,8 @@ Resources:
           TABLE_NAME: !Ref FileInfoTableName
           LOG_LEVEL: info
           BUCKET_REGION: !Ref InputBucketRegion
+      EphemeralStorage:
+        Size: !Ref EphemeralStorageSize
 
   LambdaPermission:
     Type: AWS::Lambda::Permission

@@ -4,6 +4,8 @@ Description: EchoFish topics and queues
 Parameters:
   StackPrefix:
     Type: String
+  DataManagerEmail:
+    Type: String
 
 Resources:
   ### [Step 0] Indexing ###
@@ -130,7 +132,38 @@ Resources:
         - Key: StackPrefix
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-processing-finished
+  ProcessingFinishedDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-processing-finished-dlq
 
+  ### [Step 7] Email Data Manager ###
+  EmailDataManagerTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref DataManagerEmail
+          Protocol: "email"
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-email-data-manager
+  EmailDataManagerDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-email-data-manager-dlq
 
 Outputs:
   ### [Step 0] Indexing ###
@@ -167,6 +200,14 @@ Outputs:
   ResampleAndWriteToZarrStoreDeadLetterTopicArn:
     Value: !Ref ResampleAndWriteToZarrStoreDeadLetterTopic
 
-  ### Finished ###
+  ### [Step 6] Processing Finished ###
   ProcessingFinishedTopicArn:
     Value: !Ref ProcessingFinishedTopic
+  ProcessingFinishedDeadLetterTopicArn:
+    Value: !Ref ProcessingFinishedDeadLetterTopic
+
+  ### [Step 7] Email Data Manager ###
+  EmailDataManagerTopicArn:
+    Value: !Ref EmailDataManagerTopic
+  EmailDataManagerDeadLetterTopicArn:
+    Value: !Ref EmailDataManagerDeadLetterTopic
