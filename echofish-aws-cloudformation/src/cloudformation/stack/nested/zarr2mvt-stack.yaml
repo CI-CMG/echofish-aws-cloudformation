@@ -12,8 +12,6 @@ Parameters:
     Type: Number
   ZarrStoreBucketName:
     Type: String
-  MvtBucketName:
-    Type: String
   MvtTracklineSplitMs:
     Type: Number
   MvtBatchSize:
@@ -30,13 +28,14 @@ Parameters:
     Type: Number
   LogRetentionInDays:
     Type: Number
-  DeadLetterTopicArn:
-    Type: String
   Version:
     Type: String
-  MvtDoneTopicArn:
+  ZarrBucketRegion:
     Type: String
-
+  OutputBucketUserAccessKeyPsName:
+    Type: String
+  OutputBucketUserSecretAccessKeyPsName:
+    Type: String
 
 Conditions:
   HasPermissionsBoundary:
@@ -89,16 +88,7 @@ Resources:
                 Resource: !Sub arn:${AWS::Partition}:s3:::${ZarrStoreBucketName}
                 Action:
                   - s3:ListBucket
-        - PolicyName: SNS
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Resource:
-                  - !Ref DeadLetterTopicArn
-                  - !Ref MvtDoneTopicArn
-                Action:
-                  - sns:Publish
+
 
   Zarr2MvtLambda:
     Type: AWS::Lambda::Function
@@ -121,8 +111,10 @@ Resources:
           MAX_ZOOM_LEVEL: !Ref MvtMaxZoomLevel
           MIN_SIMPLIFICATION_TOLERANCE: !Ref MvtTracklineMinSimplificationTolerance
           MAX_SIMPLIFICATION_TOLERANCE: !Ref MvtTracklineMaxSimplificationTolerance
-          MVT_BUCKET_NAME: !Ref MvtBucketName
           S3_UPLOAD_BUFFERS: !Ref MvtUploadBuffers
+          BUCKET_REGION: !Ref ZarrBucketRegion
+          ZARR_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+          ZARR_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
   Zarr2MvtLambdaLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -135,9 +127,9 @@ Resources:
       FunctionName: !Ref Zarr2MvtLambda
       Qualifier: $LATEST
       MaximumRetryAttempts: 0
-      DestinationConfig:
-        OnFailure:
-          Destination: !Ref DeadLetterTopicArn
+#      DestinationConfig:
+#        OnFailure:
+#          Destination: !Ref DeadLetterTopicArn
 
 
 Outputs:

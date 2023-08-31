@@ -731,45 +731,40 @@ Resources:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
 
-#  Zarr2MvtStack:
-#    Type: AWS::CloudFormation::Stack
-#    Properties:
-#      Parameters:
-#        MvtTracklineSplitMs: !Ref MvtTracklineSplitMs
-#        MvtBatchSize: !Ref MvtBatchSize
-#        MvtTracklinePrecision: !Ref MvtTracklinePrecision
-#        MvtMaxZoomLevel: !Ref MvtMaxZoomLevel
-#        MvtTracklineMinSimplificationTolerance: !Ref MvtTracklineMinSimplificationTolerance
-#        MvtTracklineMaxSimplificationTolerance: !Ref MvtTracklineMaxSimplificationTolerance
-#        MvtUploadBuffers: !Ref MvtUploadBuffers
-##        DeploymentBucketName:
-##          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-#        LambdaRolePermissionsBoundary: !Ref RolePermissionsBoundary
-#        Zarr2MvtLambdaTimeout: !Ref Zarr2MvtLambdaTimeout
-#        Zarr2MvtLambdaMemorySize: !Ref Zarr2MvtLambdaMemorySize
-#        ZarrStoreBucketName:
-#          Fn::GetAtt:
-#            - BucketStack
-#            - Outputs.OutputBucketName
-#        MvtBucketName:
-#          Fn::GetAtt:
-#            - BucketStack
-#            - Outputs.MvtBucketName
-#        LogRetentionInDays: !Ref LogRetentionInDays
-##        DeadLetterTopicArn:
-##          Fn::GetAtt:
-##            - MessagingStack
-##            - Outputs.ResampleAndWriteToZarrStoreDeadLetterTopicArn
-#        Version: !If [ Zarr2MvtLambdaIsRelease, @Zarr2MvtLambda.version@, @Zarr2MvtLambda.version@@dashTimestamp@ ]
-##        MvtDoneTopicArn:
-##          Fn::GetAtt:
-##            - TopicStack
-##            - Outputs.MvtDoneTopicArn
-#      TemplateURL:
-#        Fn::Sub:
-#          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2mvt-stack.yaml
-#          - DeploymentBucketName:
-#              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+  Zarr2MvtStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        MvtTracklineSplitMs: !Ref MvtTracklineSplitMs
+        MvtBatchSize: !Ref MvtBatchSize
+        MvtTracklinePrecision: !Ref MvtTracklinePrecision
+        MvtMaxZoomLevel: !Ref MvtMaxZoomLevel
+        MvtTracklineMinSimplificationTolerance: !Ref MvtTracklineMinSimplificationTolerance
+        MvtTracklineMaxSimplificationTolerance: !Ref MvtTracklineMaxSimplificationTolerance
+        MvtUploadBuffers: !Ref MvtUploadBuffers
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        LambdaRolePermissionsBoundary: !Ref RolePermissionsBoundary
+        Zarr2MvtLambdaTimeout: !Ref Zarr2MvtLambdaTimeout
+        Zarr2MvtLambdaMemorySize: !Ref Zarr2MvtLambdaMemorySize
+        ZarrStoreBucketName:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.OutputBucketName
+        LogRetentionInDays: !Ref LogRetentionInDays
+        Version: !If [ Zarr2MvtLambdaIsRelease, @Zarr2MvtLambda.version@, @Zarr2MvtLambda.version@@dashTimestamp@ ]
+        ZarrBucketRegion:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.OutputBucketRegion
+        OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
+        OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2mvt-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
 
   # https://github.com/CI-CMG/echofish-aws-cloudformation/blob/58096e7db908a47600f9df2204cefa1ff30642f0/echofish-aws-cloudformation/src/cloudformation/stack/dynamic/raw2zarr-ec2.yaml
 #  EC2Instance:
