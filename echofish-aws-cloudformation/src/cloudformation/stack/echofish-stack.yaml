@@ -201,7 +201,7 @@ Parameters:
   ### [Step 6] Aggregator ###
   AggregatorLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230831204026
+    Default: 1.0.0.dev20230901203350
   AggregatorLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -759,11 +759,21 @@ Resources:
             - Outputs.OutputBucketRegion
         OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
         OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
+        MaxConcurrency: !Ref LambdaConcurrency
+        TopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.EmailDataManagerTopicArn
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.Zarr2MvtDeadLetterTopicArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2mvt-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
 
 
   # https://github.com/CI-CMG/echofish-aws-cloudformation/blob/58096e7db908a47600f9df2204cefa1ff30642f0/echofish-aws-cloudformation/src/cloudformation/stack/dynamic/raw2zarr-ec2.yaml

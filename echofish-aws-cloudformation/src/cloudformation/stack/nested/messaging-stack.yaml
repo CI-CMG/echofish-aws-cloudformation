@@ -165,6 +165,16 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-email-data-manager-dlq
 
+  Zarr2MvtDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-zarr-to-mvt-dlq
+
 Outputs:
   ### [Step 0] Indexing ###
   IndexLambdaTopicArn:
@@ -211,3 +221,6 @@ Outputs:
     Value: !Ref EmailDataManagerTopic
   EmailDataManagerDeadLetterTopicArn:
     Value: !Ref EmailDataManagerDeadLetterTopic
+
+  Zarr2MvtDeadLetterTopicArn:
+    Value: !Ref Zarr2MvtDeadLetterTopic
