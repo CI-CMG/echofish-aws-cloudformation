@@ -288,7 +288,7 @@ Conditions:
               - @ZarrCruiseAccumulatorLambda.version@
   BucketDrainLambdaIsRelease:
     Fn::Equals:
-      - @CruiseSplitterLambda.version@
+      - @BucketDrainLambda.version@
       - Fn::Join:
           - ""
           - Fn::Split:
