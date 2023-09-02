@@ -293,7 +293,7 @@ Conditions:
           - ""
           - Fn::Split:
               - "-SNAPSHOT"
-              - @CruiseSplitterLambda.version@
+              - @BucketDrainLambda.version@
   CreateEmptyZarrStoreLambdaIsRelease:
     Fn::Equals:
       - @CreateEmptyZarrStoreLambda.version@
