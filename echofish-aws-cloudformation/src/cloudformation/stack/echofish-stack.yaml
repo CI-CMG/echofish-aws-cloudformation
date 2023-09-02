@@ -254,7 +254,7 @@ Parameters:
     Description: The maximum zoom level that MVTs are generated for
     Type: Number
     MinValue: 5
-    Default: 10
+    Default: 9
   MvtTracklineMinSimplificationTolerance:
     Description: The minimum simplification tolerance when generating MVTs
     Type: Number
