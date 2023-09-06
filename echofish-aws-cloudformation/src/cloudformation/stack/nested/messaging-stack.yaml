@@ -175,6 +175,16 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-zarr-to-mvt-dlq
 
+  GeohashDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-geohash-dlq
+
 Outputs:
   ### [Step 0] Indexing ###
   IndexLambdaTopicArn:
@@ -224,3 +234,6 @@ Outputs:
 
   Zarr2MvtDeadLetterTopicArn:
     Value: !Ref Zarr2MvtDeadLetterTopic
+
+  GeohashDeadLetterTopicArn:
+    Value: !Ref GeohashDeadLetterTopic

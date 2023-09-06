@@ -269,6 +269,25 @@ Parameters:
     MinValue: 1
     Default: 2
 
+  ### [Step 6] Generate Geohash ###
+  GeohashLambdaTimeout:
+    Description: The timeout in seconds for the geohash lambda
+    Type: Number
+    MinValue: 10
+    MaxValue: 900
+    Default: 900
+  GeohashLambdaMemorySize:
+    Description: The amount of memory for the geohash lambda
+    Type: Number
+    MinValue: 256
+    MaxValue: 10240
+    Default: 4096
+  GeohashLambdaUploadBuffers:
+    Description: The maximum sets of batches to keep in memory when uploading geohash files
+    Type: Number
+    MinValue: 1
+    Default: 2
+
 Conditions:
   CruiseSplitterLambdaIsRelease:
     Fn::Equals:
@@ -310,6 +329,15 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @Zarr2MvtLambda.version@
+
+  GeohashLambdaIsRelease:
+    Fn::Equals:
+      - @GeohashLambda.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @GeohashLambda.version@
 
 Resources:
   DynamoDbStack:
@@ -774,6 +802,42 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
+  GeohashLambdaStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        GeohashLambdaUploadBuffers: !Ref GeohashLambdaUploadBuffers
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        LambdaRolePermissionsBoundary: !Ref RolePermissionsBoundary
+        GeohashLambdaTimeout: !Ref GeohashLambdaTimeout
+        GeohashLambdaMemorySize: !Ref GeohashLambdaMemorySize
+        ZarrStoreBucketName:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.OutputBucketName
+        LogRetentionInDays: !Ref LogRetentionInDays
+        Version: !If [ GeohashLambdaIsRelease, @GeohashLambda.version@, @GeohashLambda.version@@dashTimestamp@ ]
+        ZarrBucketRegion:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.OutputBucketRegion
+        OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
+        OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
+        MaxConcurrency: !Ref LambdaConcurrency
+        TopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.EmailDataManagerTopicArn
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.GeohashDeadLetterTopicArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2geohash-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
 
   # https://github.com/CI-CMG/echofish-aws-cloudformation/blob/58096e7db908a47600f9df2204cefa1ff30642f0/echofish-aws-cloudformation/src/cloudformation/stack/dynamic/raw2zarr-ec2.yaml

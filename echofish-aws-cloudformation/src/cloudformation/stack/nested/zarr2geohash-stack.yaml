@@ -6,27 +6,30 @@ Parameters:
     Type: String
   LambdaRolePermissionsBoundary:
     Type: String
-  Zarr2GeoHashLambdaMaxConcurrency:
+  GeohashLambdaTimeout:
     Type: Number
-  Zarr2GeoHashLambdaTimeout:
-    Type: Number
-  Zarr2GeoHashLambdaMemorySize:
+  GeohashLambdaMemorySize:
     Type: Number
   ZarrStoreBucketName:
     Type: String
-  GeoHashBucketName:
-    Type: String
-  GeoHashUploadBuffers:
+  GeohashLambdaUploadBuffers:
     Type: Number
   LogRetentionInDays:
     Type: Number
-  DeadLetterTopicArn:
-    Type: String
   Version:
     Type: String
-  GeoHashDoneTopicArn:
+  ZarrBucketRegion:
     Type: String
-
+  OutputBucketUserAccessKeyPsName:
+    Type: String
+  OutputBucketUserSecretAccessKeyPsName:
+    Type: String
+  MaxConcurrency:
+    Type: Number
+  TopicArn:
+    Type: String
+  DeadLetterTopicArn:
+    Type: String
 
 Conditions:
   HasPermissionsBoundary:
@@ -37,7 +40,7 @@ Conditions:
 
 Resources:
 
-  Zarr2GeoHashLambdaRole:
+  LambdaRole:
     Type: AWS::IAM::Role
     Properties:
       PermissionsBoundary:
@@ -53,7 +56,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action:
-              - sts:AssumeRole
+              - 'sts:AssumeRole'
       Policies:
         - PolicyName: Logging
           PolicyDocument:
@@ -62,23 +65,9 @@ Resources:
               - Effect: Allow
                 Resource: !Sub arn:${AWS::Partition}:logs:*:*:*
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-        - PolicyName: S3
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Resource: !Sub arn:${AWS::Partition}:s3:::${ZarrStoreBucketName}/*
-                Action:
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-              - Effect: Allow
-                Resource: !Sub arn:${AWS::Partition}:s3:::${ZarrStoreBucketName}
-                Action:
-                  - s3:ListBucket
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
         - PolicyName: SNS
           PolicyDocument:
             Version: 2012-10-17
@@ -86,50 +75,107 @@ Resources:
               - Effect: Allow
                 Resource:
                   - !Ref DeadLetterTopicArn
-                  - !Ref GeoHashDoneTopicArn
                 Action:
-                  - sns:Publish
+                  - 'sns:Publish'
 
-  Zarr2GeoHashLambda:
+  Lambda:
     Type: AWS::Lambda::Function
     Properties:
       Code:
         S3Bucket: !Ref DeploymentBucketName
         S3Key: !Sub lambda/echofish-aws-geohash-lambda-${Version}-lambda.zip
-      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.geohash.GeoHashLambda::handleRequest
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.geohash.GeohashLambda::handleRequest
       Runtime: java11
-      MemorySize: !Ref Zarr2GeoHashLambdaMemorySize
-      Timeout: !Ref Zarr2GeoHashLambdaTimeout
-      ReservedConcurrentExecutions: !Ref Zarr2GeoHashLambdaMaxConcurrency
-      Role: !GetAtt Zarr2GeoHashLambdaRole.Arn
+      MemorySize: !Ref GeohashLambdaMemorySize
+      Timeout: !Ref GeohashLambdaTimeout
+      ReservedConcurrentExecutions: !Ref MaxConcurrency
+      Role: !GetAtt LambdaRole.Arn
       Environment:
         Variables:
           ZARR_BUCKET_NAME: !Ref ZarrStoreBucketName
-          GEOHASH_BUCKET_NAME: !Ref GeoHashBucketName
-          S3_UPLOAD_BUFFERS: !Ref GeoHashUploadBuffers
-  Zarr2GeoHashLambdaLogGroup:
+          S3_UPLOAD_BUFFERS: !Ref GeohashLambdaUploadBuffers
+          BUCKET_REGION: !Ref ZarrBucketRegion
+          ZARR_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
+          ZARR_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
+
+  LambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Lambda
+      Principal: sns.amazonaws.com
+      Action: lambda:InvokeFunction
+      SourceArn: !Ref TopicArn
+
+  LambdaSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: lambda
+      Endpoint: !GetAtt Lambda.Arn
+      TopicArn: !Ref TopicArn
+
+  LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/${Zarr2GeoHashLambda}
+      LogGroupName: !Sub /aws/lambda/${Lambda}
       RetentionInDays: !Ref LogRetentionInDays
 
-  Zarr2GeoHashLambdaEvent:
+  LambdaEvent:
     Type: AWS::Lambda::EventInvokeConfig
     Properties:
-      FunctionName: !Ref Zarr2GeoHashLambda
+      FunctionName: !Ref Lambda
       Qualifier: $LATEST
       MaximumRetryAttempts: 0
       DestinationConfig:
         OnFailure:
           Destination: !Ref DeadLetterTopicArn
 
+  TopicSubscribePolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref TopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: SubscribeToTopic
+            Resource: !Ref TopicArn
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Subscribe
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt Lambda.Arn
+
+  TopicDlqPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref DeadLetterTopicArn
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: PublishToTopic
+            Effect: Allow
+            Resource: !Ref DeadLetterTopicArn
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sns:Publish
+            Condition:
+              ArnEquals:
+                aws:SourceArn:
+                  - !GetAtt Lambda.Arn
+
 
 Outputs:
-  Zarr2GeoHashLambdaArn:
-    Value: !GetAtt Zarr2GeoHashLambda.Arn
-  Zarr2GeoHashLambdaName:
-    Value: !Ref Zarr2GeoHashLambda
-
+  LambdaArn:
+    Value: !GetAtt Lambda.Arn
+  LambdaName:
+    Value: !Ref Lambda
 
 
 

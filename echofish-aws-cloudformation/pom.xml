@@ -32,7 +32,7 @@
     <RawToZarrErrorLambda.version>1.0.0-SNAPSHOT</RawToZarrErrorLambda.version>
     <CreateEmptyZarrStoreLambda.version>1.0.0-SNAPSHOT</CreateEmptyZarrStoreLambda.version>
     <Zarr2MvtLambda.version>1.0.0-SNAPSHOT</Zarr2MvtLambda.version>
-    <!--    <geoh.version>1.0.0-SNAPSHOT</geoh.version>-->
+    <GeohashLambda.version>1.0.0-SNAPSHOT</GeohashLambda.version>
     <!--    <r2z.version>1.0.0-SNAPSHOT</r2z.version>-->
     <!--    <cr.version>1.0.0-SNAPSHOT</cr.version>-->
     <!--    <za.version>1.0.0-SNAPSHOT</za.version>-->
@@ -138,13 +138,13 @@
       <classifier>lambda</classifier>
       <type>zip</type>
     </dependency>
-    <!--    <dependency>-->
-    <!--      <groupId>io.github.ci-cmg.echofish</groupId>-->
-    <!--      <artifactId>echofish-aws-geohash-lambda</artifactId>-->
-    <!--      <version>${geoh.version}</version>-->
-    <!--      <classifier>lambda</classifier>-->
-    <!--      <type>zip</type>-->
-    <!--    </dependency>-->
+    <dependency>
+      <groupId>io.github.ci-cmg.echofish</groupId>
+      <artifactId>echofish-aws-geohash-lambda</artifactId>
+      <version>${GeohashLambda.version}</version>
+      <classifier>lambda</classifier>
+      <type>zip</type>
+    </dependency>
     <!--    <dependency>-->
     <!--      <groupId>edu.colorado.cires.cmg.echofish</groupId>-->
     <!--      <artifactId>echofish-aws-raw2zarr</artifactId>-->
