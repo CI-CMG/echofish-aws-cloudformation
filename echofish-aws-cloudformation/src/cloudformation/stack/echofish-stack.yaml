@@ -258,11 +258,11 @@ Parameters:
   MvtTracklineMinSimplificationTolerance:
     Description: The minimum simplification tolerance when generating MVTs
     Type: Number
-    Default: 0.00001
+    Default: 0.0001
   MvtTracklineMaxSimplificationTolerance:
     Description: The maximum simplification tolerance when generating MVTs
     Type: Number
-    Default: 0.01
+    Default: 0.1
   MvtUploadBuffers:
     Description: The maximum sets of batches to keep in memory when uploading MVTs
     Type: Number
