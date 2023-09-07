@@ -85,15 +85,15 @@ Parameters:
     MinValue: 1
     MaxValue: 900
     Default: 240
-#  CruiseSplitterLambdaConcurrency:
-#    Type: Number
-#    MinValue: 1
-#    Default: 3
+  CruiseSplitterLambdaConcurrency:
+    Type: Number
+    MinValue: 1
+    Default: 3
 
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230831205745
+    Default: 1.0.0.dev20230906215656
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -146,7 +146,7 @@ Parameters:
   ### [Step 4] Create Empty Zarr Store ### # TODO: "CreateCruiseZarrStoreLambda"
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230828232015
+    Default: 1.0.0.dev20230906222237
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -156,7 +156,7 @@ Parameters:
     Type: Number
     MinValue: 512
     MaxValue: 10240
-    Default: 512
+    Default: 1024
   CreateEmptyZarrStoreLambdaTimeout:
     Type: Number
     MinValue: 1
@@ -177,7 +177,7 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230829214247
+    Default: 1.0.0.dev20230906215711
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -201,7 +201,7 @@ Parameters:
   ### [Step 6] Aggregator ###
   AggregatorLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230901203350
+    Default: 1.0.0.dev20230906230659
   AggregatorLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -430,7 +430,7 @@ Resources:
         MemorySize: !Ref CruiseSplitterLambdaMemorySize
         EphemeralStorageSize: !Ref CruiseSplitterLambdaEphemeralStorageSize
         Timeout: !Ref CruiseSplitterLambdaTimeout
-        MaxConcurrency: !Ref LambdaConcurrency # CruiseSplitterLambdaConcurrency
+        MaxConcurrency: !Ref CruiseSplitterLambdaConcurrency
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
