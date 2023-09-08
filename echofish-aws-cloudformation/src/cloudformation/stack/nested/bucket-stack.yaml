@@ -105,7 +105,6 @@ Resources:
         Variables:
           TIMEOUT_SECONDS: 900
 
-
   ############################### DevOutputBucket ########################
   DevOutputBucket:
     Type: AWS::S3::Bucket

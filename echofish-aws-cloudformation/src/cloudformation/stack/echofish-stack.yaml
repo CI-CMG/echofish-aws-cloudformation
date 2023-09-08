@@ -146,7 +146,7 @@ Parameters:
   ### [Step 4] Create Empty Zarr Store ### # TODO: "CreateCruiseZarrStoreLambda"
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230906222237
+    Default: 1.0.0.dev20230907210004
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -156,7 +156,7 @@ Parameters:
     Type: Number
     MinValue: 512
     MaxValue: 10240
-    Default: 1024
+    Default: 5120
   CreateEmptyZarrStoreLambdaTimeout:
     Type: Number
     MinValue: 1
@@ -177,17 +177,17 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230906215711
+    Default: 1.0.0.dev20230907222601
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
     MaxValue: 10240
-    Default: 2048
+    Default: 4096
   ResampleAndWriteToZarrStoreLambdaEphemeralStorageSize:
     Type: Number
     MinValue: 512
     MaxValue: 10240
-    Default: 1024
+    Default: 5120
   ResampleAndWriteToZarrStoreLambdaTimeout:
     Type: Number
     MinValue: 1
