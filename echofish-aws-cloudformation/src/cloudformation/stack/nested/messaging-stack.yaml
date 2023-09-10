@@ -165,6 +165,16 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-email-data-manager-dlq
 
+  Zarr2MvtTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-zarr-to-mvt
+
   Zarr2MvtDeadLetterTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -174,6 +184,16 @@ Resources:
         - Key: StackPrefix
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-zarr-to-mvt-dlq
+
+  MvtMergeDeadLetterTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-mvt-merge-dlq
 
   GeohashDeadLetterTopic:
     Type: AWS::SNS::Topic
@@ -232,8 +252,13 @@ Outputs:
   EmailDataManagerDeadLetterTopicArn:
     Value: !Ref EmailDataManagerDeadLetterTopic
 
+  Zarr2MvtTopicArn:
+    Value: !Ref Zarr2MvtTopic
   Zarr2MvtDeadLetterTopicArn:
     Value: !Ref Zarr2MvtDeadLetterTopic
+
+  MvtMergeDeadLetterTopicArn:
+    Value: !Ref MvtMergeDeadLetterTopic
 
   GeohashDeadLetterTopicArn:
     Value: !Ref GeohashDeadLetterTopic

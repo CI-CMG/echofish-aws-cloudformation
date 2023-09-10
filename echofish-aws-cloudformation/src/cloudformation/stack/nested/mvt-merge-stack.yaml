@@ -6,24 +6,12 @@ Parameters:
     Type: String
   LambdaRolePermissionsBoundary:
     Type: String
-  Zarr2MvtLambdaTimeout:
+  MvtMergeLambdaTimeout:
     Type: Number
-  Zarr2MvtLambdaMemorySize:
+  MvtMergeLambdaMemorySize:
     Type: Number
   ZarrStoreBucketName:
     Type: String
-  MvtTracklineSplitMs:
-    Type: Number
-  MvtBatchSize:
-    Type: Number
-  MvtTracklinePrecision:
-    Type: Number
-  MvtMaxZoomLevel:
-    Type: Number
-  MvtTracklineMinSimplificationTolerance:
-    Type: Number
-  MvtTracklineMaxSimplificationTolerance:
-    Type: Number
   MvtUploadBuffers:
     Type: Number
   LogRetentionInDays:
@@ -36,13 +24,9 @@ Parameters:
     Type: String
   OutputBucketUserSecretAccessKeyPsName:
     Type: String
-  MaxConcurrency:
-    Type: Number
   TopicArn:
     Type: String
   DeadLetterTopicArn:
-    Type: String
-  DoneTopicArn:
     Type: String
 
 Conditions:
@@ -89,7 +73,6 @@ Resources:
               - Effect: Allow
                 Resource:
                   - !Ref DeadLetterTopicArn
-                  - !Ref DoneTopicArn
                 Action:
                   - 'sns:Publish'
 
@@ -99,26 +82,19 @@ Resources:
       Code:
         S3Bucket: !Ref DeploymentBucketName
         S3Key: !Sub lambda/echofish-aws-mvt-lambda-${Version}-lambda.zip
-      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.mvt.lambda.MvtLambda::handleRequest
+      Handler: edu.colorado.cires.cmg.echofish.aws.lambda.mvt.lambda.MvtMergeLambda::handleRequest
       Runtime: java11
-      MemorySize: !Ref Zarr2MvtLambdaMemorySize
-      Timeout: !Ref Zarr2MvtLambdaTimeout
-      ReservedConcurrentExecutions: !Ref MaxConcurrency
+      MemorySize: !Ref MvtMergeLambdaMemorySize
+      Timeout: !Ref MvtMergeLambdaTimeout
+      ReservedConcurrentExecutions: 1
       Role: !GetAtt LambdaRole.Arn
       Environment:
         Variables:
           ZARR_BUCKET_NAME: !Ref ZarrStoreBucketName
-          TRACKLINE_SPLIT_MS: !Ref MvtTracklineSplitMs
-          BATCH_SIZE: !Ref MvtBatchSize
-          GEO_JSON_PRECISION: !Ref MvtTracklinePrecision
-          MAX_ZOOM_LEVEL: !Ref MvtMaxZoomLevel
-          MIN_SIMPLIFICATION_TOLERANCE: !Ref MvtTracklineMinSimplificationTolerance
-          MAX_SIMPLIFICATION_TOLERANCE: !Ref MvtTracklineMaxSimplificationTolerance
           S3_UPLOAD_BUFFERS: !Ref MvtUploadBuffers
           BUCKET_REGION: !Ref ZarrBucketRegion
           ZARR_BUCKET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserAccessKeyPsName}}}"
           ZARR_BUCKET_SECRET_ACCESS_KEY: !Sub "{{resolve:ssm:${OutputBucketUserSecretAccessKeyPsName}}}"
-          TOPIC_ARN: !Ref DoneTopicArn
 
   LambdaPermission:
     Type: AWS::Lambda::Permission

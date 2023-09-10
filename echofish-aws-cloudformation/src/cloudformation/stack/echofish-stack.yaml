@@ -254,11 +254,11 @@ Parameters:
     Description: The maximum zoom level that MVTs are generated for
     Type: Number
     MinValue: 5
-    Default: 8
+    Default: 7
   MvtTracklineMinSimplificationTolerance:
     Description: The minimum simplification tolerance when generating MVTs
     Type: Number
-    Default: 0.0001
+    Default: 0.001
   MvtTracklineMaxSimplificationTolerance:
     Description: The maximum simplification tolerance when generating MVTs
     Type: Number
@@ -268,6 +268,19 @@ Parameters:
     Type: Number
     MinValue: 1
     Default: 2
+
+  MvtMergeLambdaTimeout:
+    Description: The timeout in seconds for the Zarr to MVT lambda
+    Type: Number
+    MinValue: 10
+    MaxValue: 900
+    Default: 900
+  MvtMergeLambdaMemorySize:
+    Description: The amount of memory for the Zarr to MVT lambda
+    Type: Number
+    MinValue: 256
+    MaxValue: 10240
+    Default: 4096
 
   ### [Step 6] Generate Geohash ###
   GeohashLambdaTimeout:
@@ -796,9 +809,49 @@ Resources:
           Fn::GetAtt:
             - MessagingStack
             - Outputs.Zarr2MvtDeadLetterTopicArn
+        DoneTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.Zarr2MvtTopicArn
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/zarr2mvt-stack.yaml
+          - DeploymentBucketName:
+              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+  MvtMergeStack:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      Parameters:
+        MvtUploadBuffers: !Ref MvtUploadBuffers
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+        LambdaRolePermissionsBoundary: !Ref RolePermissionsBoundary
+        MvtMergeLambdaTimeout: !Ref MvtMergeLambdaTimeout
+        MvtMergeLambdaMemorySize: !Ref MvtMergeLambdaMemorySize
+        ZarrStoreBucketName:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.OutputBucketName
+        LogRetentionInDays: !Ref LogRetentionInDays
+        Version: !If [ Zarr2MvtLambdaIsRelease, @Zarr2MvtLambda.version@, @Zarr2MvtLambda.version@@dashTimestamp@ ]
+        ZarrBucketRegion:
+          Fn::GetAtt:
+            - BucketStack
+            - Outputs.OutputBucketRegion
+        OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
+        OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
+        TopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.Zarr2MvtTopicArn
+        DeadLetterTopicArn:
+          Fn::GetAtt:
+            - MessagingStack
+            - Outputs.MvtMergeDeadLetterTopicArn
+      TemplateURL:
+        Fn::Sub:
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/mvt-merge-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
