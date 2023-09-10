@@ -38,7 +38,7 @@ Parameters:
   DataManagerEmail:
     Description: The email which will receive final notification of the pipeline status.
     Type: String
-    Default: "rudyklucik@noaa.gov"
+    Default: "rudy.klucik@noaa.gov"
 # TODO: see if we can feed in a list of emails?
   RolePermissionsBoundary:
     Description: An optional permissions boundary to associate with roles.
@@ -177,7 +177,7 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230907222601
+    Default: 1.0.0.dev20230908201604
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
