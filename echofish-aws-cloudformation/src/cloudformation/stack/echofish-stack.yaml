@@ -39,7 +39,6 @@ Parameters:
     Description: The email which will receive final notification of the pipeline status.
     Type: String
     Default: "rudy.klucik@noaa.gov"
-# TODO: see if we can feed in a list of emails?
   RolePermissionsBoundary:
     Description: An optional permissions boundary to associate with roles.
     Type: String
@@ -93,7 +92,7 @@ Parameters:
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230906215656
+    Default: 1.0.0.dev20230921174702
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -151,12 +150,12 @@ Parameters:
     Type: Number
     MinValue: 128
     MaxValue: 10240
-    Default: 4096
+    Default: 10240
   CreateEmptyZarrStoreLambdaEphemeralStorageSize:
     Type: Number
     MinValue: 512
     MaxValue: 10240
-    Default: 5120
+    Default: 10240
   CreateEmptyZarrStoreLambdaTimeout:
     Type: Number
     MinValue: 1
@@ -760,7 +759,7 @@ Resources:
         DoneTopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.EmailDataManagerTopicArn # TODO: this
+            - Outputs.EmailDataManagerTopicArn
         DeadLetterTopicArn:
           Fn::GetAtt:
             - MessagingStack
