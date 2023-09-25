@@ -126,6 +126,7 @@ Resources:
           TOPIC_ARN: !Ref DoneTopicArn
       EphemeralStorage:
         Size: !Ref EphemeralStorageSize
+#      FileSystemConfigs:
 
   LambdaPermission:
     Type: AWS::Lambda::Permission

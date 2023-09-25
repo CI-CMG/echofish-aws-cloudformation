@@ -51,7 +51,8 @@ Parameters:
     Description: Used to control all lambda concurrency in the stack.
     Type: Number
     MinValue: 1
-    Default: 20
+#    Default: 20
+    Default: 5
 
   ### [Step 0] Indexing ###
   IndexingLambdaImageTag:
@@ -92,7 +93,7 @@ Parameters:
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230921174702
+    Default: 1.0.0.dev20230924035142
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -108,10 +109,10 @@ Parameters:
     MinValue: 1
     MaxValue: 900
     Default: 900
-#  RawToZarrLambdaConcurrency:
-#    Type: Number
-#    MinValue: 1
-#    Default: 3
+  RawToZarrLambdaConcurrency:
+    Type: Number
+    MinValue: 1
+    Default: 10
 
   ### [Step 2b] Raw to Zarr Error Handler ###
 #  RawToZarrErrorLambdaMemorySize:
@@ -145,7 +146,7 @@ Parameters:
   ### [Step 4] Create Empty Zarr Store ### # TODO: "CreateCruiseZarrStoreLambda"
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230907210004
+    Default: 1.0.0.dev20230924044414
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -176,7 +177,7 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230908201604
+    Default: 1.0.0.dev20230925103525
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -300,6 +301,17 @@ Parameters:
     MinValue: 1
     Default: 2
 
+  # VPC EFS Synchronizer for Resample Lambda
+  VpcId:
+    Description: The resample lambda needs EFS in a VPC to properly access processor synchronizer
+    Type: String
+    Default: "vpc-70e36a08"
+  RouteTableId:
+    Description: The resample lambda needs EFS in a VPC to properly access processor synchronizer
+    Type: String
+    Default: "rtb-9ae48fe1"
+
+
 Conditions:
   CruiseSplitterLambdaIsRelease:
     Fn::Equals:
@@ -341,7 +353,6 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @Zarr2MvtLambda.version@
-
   GeohashLambdaIsRelease:
     Fn::Equals:
       - @GeohashLambda.version@
@@ -352,6 +363,39 @@ Conditions:
               - @GeohashLambda.version@
 
 Resources:
+  S3SynchronizerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+#      PolicyDocument: Json
+      RouteTableIds:
+        - !Ref RouteTableId
+#      SecurityGroupIds:
+#        - String
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: "Gateway"
+      VpcId: !Ref VpcId
+  DynamoDBSynchronizerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        - !Ref RouteTableId
+#      SecurityGroupIds:
+#        - String
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
+      VpcEndpointType: "Gateway"
+      VpcId: !Ref VpcId
+  SNSSynchronizerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      #      SecurityGroupIds:
+      #        - String
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.sns'
+      SubnetIds:
+        - "subnet-b08d96c9" # TODO: need to parameterize
+        - "subnet-bf887de2"
+      VpcEndpointType: "Interface"
+      VpcId: !Ref VpcId
+
   DynamoDbStack:
     Type: AWS::CloudFormation::Stack
     Properties:
@@ -482,7 +526,7 @@ Resources:
         MemorySize: !Ref RawToZarrLambdaMemorySize
         EphemeralStorageSize: !Ref RawToZarrLambdaEphemeralStorageSize
         Timeout: !Ref RawToZarrLambdaTimeout
-        MaxConcurrency: !Ref LambdaConcurrency
+        MaxConcurrency: !Ref RawToZarrLambdaConcurrency
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
@@ -562,42 +606,6 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
-
-  ### [Step 2b] Raw to Zarr Error Handler ###
-#  RawToZarrErrorLambdaStack:
-#    Type: AWS::CloudFormation::Stack
-#    Properties:
-#      Parameters:
-#        DeploymentBucketName:
-#          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-#        RolePermissionsBoundary: !Ref RolePermissionsBoundary
-#        Timeout: !Ref RawToZarrErrorLambdaTimeout
-#        MaxConcurrency: !Ref LambdaConcurrency # RawToZarrErrorLambdaConcurrency
-#        MemorySize: !Ref RawToZarrErrorLambdaMemorySize
-#        LogRetentionInDays: !Ref LogRetentionInDays
-#        Version: !If [ RawToZarrErrorLambdaIsRelease, @RawToZarrErrorLambda.version@, @RawToZarrErrorLambda.version@@dashTimestamp@ ]
-#        FileInfoTableArn:
-#          Fn::GetAtt:
-#            - DynamoDbStack
-#            - Outputs.FileInfoTableArn
-#        FileInfoTableName:
-#          Fn::GetAtt:
-#            - DynamoDbStack
-#            - Outputs.FileInfoTableName
-#        TopicArn:
-#          Fn::GetAtt:
-#            - MessagingStack
-#            - Outputs.RawToZarrDeadLetterTopicArn
-#        AccumulatorTopicArn:
-#          Fn::GetAtt:
-#            - MessagingStack
-#            - Outputs.ZarrCruiseAccumulatorLambdaTopicArn
-#      TemplateURL:
-#        Fn::Sub:
-#          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-error-stack.yaml
-#          - DeploymentBucketName:
-#              Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
-
   ### [Step 3] Zarr Cruise Accumulator ###
   ZarrCruiseAccumulatorLambdaStack:
     Type: AWS::CloudFormation::Stack
@@ -606,10 +614,12 @@ Resources:
         DeploymentBucketName:
           Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
         RolePermissionsBoundary: !Ref RolePermissionsBoundary
-        Timeout: !Ref ZarrCruiseAccumulatorLambdaTimeout
+        LogRetentionInDays: !Ref LogRetentionInDays
+#        ImageTag:
         MemorySize: !Ref ZarrCruiseAccumulatorLambdaMemorySize
         EphemeralStorageSize: !Ref ZarrCruiseAccumulatorLambdaEphemeralStorageSize
-        LogRetentionInDays: !Ref LogRetentionInDays
+        Timeout: !Ref ZarrCruiseAccumulatorLambdaTimeout
+#        MaxConcurrency: !Ref LambdaConcurrency
         Version: !If [ ZarrCruiseAccumulatorLambdaIsRelease, @ZarrCruiseAccumulatorLambda.version@, @ZarrCruiseAccumulatorLambda.version@@dashTimestamp@ ]
         FileInfoTableArn:
           Fn::GetAtt:
@@ -687,6 +697,29 @@ Resources:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/create-empty-zarr-store-lambda-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
+#        Fn::Sub:
+#          - ${StackPrefix}-${AWS::AccountId}-EFS
+  ### EFS File System ####
+#  FileSystem:
+#    Type: AWS::EFS::FileSystem
+#    Properties:
+#      PerformanceMode: generalPurpose
+#
+#  AccessPointResource:
+#    Type: AWS::EFS::AccessPoint
+#    Properties:
+#      FileSystemId:
+#        Ref: FileSystem
+#      PosixUser:
+#        Uid: "1001"
+#        Gid: "1001"
+#      RootDirectory:
+#        CreationInfo:
+#          OwnerGid: "1001"
+#          OwnerUid: "1001"
+#          Permissions: "755"
+##        Path: "/efs"
 
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaStack:
