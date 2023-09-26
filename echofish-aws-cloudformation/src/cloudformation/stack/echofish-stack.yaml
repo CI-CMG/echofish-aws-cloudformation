@@ -51,7 +51,6 @@ Parameters:
     Description: Used to control all lambda concurrency in the stack.
     Type: Number
     MinValue: 1
-#    Default: 20
     Default: 5
 
   ### [Step 0] Indexing ###
@@ -93,7 +92,7 @@ Parameters:
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230924035142
+    Default: 1.0.0.dev20230926192913
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -115,16 +114,16 @@ Parameters:
     Default: 10
 
   ### [Step 2b] Raw to Zarr Error Handler ###
-#  RawToZarrErrorLambdaMemorySize:
-#    Type: Number
-#    MinValue: 128
-#    MaxValue: 10240
-#    Default: 1024
-#  RawToZarrErrorLambdaTimeout:
-#    Type: Number
-#    MinValue: 1
-#    MaxValue: 900
-#    Default: 240
+  RawToZarrErrorLambdaMemorySize:
+    Type: Number
+    MinValue: 128
+    MaxValue: 10240
+    Default: 1024
+  RawToZarrErrorLambdaTimeout:
+    Type: Number
+    MinValue: 1
+    MaxValue: 900
+    Default: 240
 
   ### [Step 3] Zarr Cruise Accumulator ###
   ZarrCruiseAccumulatorLambdaMemorySize:
@@ -146,7 +145,7 @@ Parameters:
   ### [Step 4] Create Empty Zarr Store ### # TODO: "CreateCruiseZarrStoreLambda"
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230924044414
+    Default: 1.0.0.dev20230926173325
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -177,7 +176,7 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230925103525
+    Default: 1.0.0.dev20230926165435
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -193,15 +192,15 @@ Parameters:
     MinValue: 1
     MaxValue: 900
     Default: 900
-#  ResampleAndWriteToZarrStoreLambdaConcurrency:
-#    Type: Number
-#    MinValue: 1
-#    Default: 3
+  ResampleAndWriteToZarrStoreLambdaConcurrency:
+    Type: Number
+    MinValue: 1
+    Default: 3
 
   ### [Step 6] Aggregator ###
   AggregatorLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230906230659
+    Default: 1.0.0.dev20230926163137
   AggregatorLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -216,7 +215,7 @@ Parameters:
     Type: Number
     MinValue: 1
     MaxValue: 900
-    Default: 30
+    Default: 60
   AggregatorLambdaConcurrency:
     Type: Number
     MinValue: 1
@@ -329,6 +328,14 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @ZarrCruiseAccumulatorLambda.version@
+  RawToZarrErrorLambdaIsRelease:
+    Fn::Equals:
+      - @RawToZarrErrorLambda.version@
+      - Fn::Join:
+          - ""
+          - Fn::Split:
+              - "-SNAPSHOT"
+              - @RawToZarrErrorLambda.version@
   BucketDrainLambdaIsRelease:
     Fn::Equals:
       - @BucketDrainLambda.version@
@@ -562,17 +569,19 @@ Resources:
 
   ## [Step 2b] Raw to Zarr Error Handler ###
   # Note: this lambda catches failures from raw-to-zarr and processes them into queue
+
   RawToZarrErrorLambdaStack:
     Type: AWS::CloudFormation::Stack
     Properties:
       Parameters:
+        DeploymentBucketName:
+          Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
         RolePermissionsBoundary: !Ref RolePermissionsBoundary
+        Timeout: !Ref RawToZarrErrorLambdaTimeout
+        MaxConcurrency: !Ref LambdaConcurrency # RawToZarrErrorLambdaConcurrency
+        MemorySize: !Ref RawToZarrErrorLambdaMemorySize
         LogRetentionInDays: !Ref LogRetentionInDays
-        ImageTag: !Ref RawToZarrLambdaImageTag
-        MemorySize: !Ref RawToZarrLambdaMemorySize
-        EphemeralStorageSize: !Ref RawToZarrLambdaEphemeralStorageSize
-        Timeout: !Ref RawToZarrLambdaTimeout
-        MaxConcurrency: !Ref LambdaConcurrency
+        Version: !If [ RawToZarrErrorLambdaIsRelease, @RawToZarrErrorLambda.version@, @RawToZarrErrorLambda.version@@dashTimestamp@ ]
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
@@ -581,30 +590,20 @@ Resources:
           Fn::GetAtt:
             - DynamoDbStack
             - Outputs.FileInfoTableName
-        InputBucket: !Ref RawSourceBucket
-        OutputBucket:
-          Fn::GetAtt:
-            - BucketStack
-            - Outputs.OutputBucketName
-        OutputBucketUserAccessKeyPsName: !Ref OutputBucketUserAccessKeyPsName
-        OutputBucketUserSecretAccessKeyPsName: !Ref OutputBucketUserSecretAccessKeyPsName
         TopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.RawToZarrLambdaTopicArn
-        DoneTopicArn:
+            - Outputs.RawToZarrDeadLetterTopicArn
+        AccumulatorTopicArn:
           Fn::GetAtt:
             - MessagingStack
             - Outputs.ZarrCruiseAccumulatorLambdaTopicArn
-        DeadLetterTopicArn:
-          Fn::GetAtt:
-            - MessagingStack
-            - Outputs.RawToZarrDeadLetterTopicArn
       TemplateURL:
         Fn::Sub:
-          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-lambda-stack.yaml
+          - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/raw-to-zarr-error-stack.yaml
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
+
 
   ### [Step 3] Zarr Cruise Accumulator ###
   ZarrCruiseAccumulatorLambdaStack:
@@ -732,7 +731,7 @@ Resources:
         MemorySize: !Ref ResampleAndWriteToZarrStoreLambdaMemorySize
         EphemeralStorageSize: !Ref ResampleAndWriteToZarrStoreLambdaEphemeralStorageSize
         Timeout: !Ref ResampleAndWriteToZarrStoreLambdaTimeout
-        MaxConcurrency: !Ref LambdaConcurrency # ResampleAndWriteToZarrStoreLambdaConcurrency
+        MaxConcurrency: !Ref ResampleAndWriteToZarrStoreLambdaConcurrency
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
