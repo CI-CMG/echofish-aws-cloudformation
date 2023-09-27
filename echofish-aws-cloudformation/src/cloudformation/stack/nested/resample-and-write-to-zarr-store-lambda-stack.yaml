@@ -35,6 +35,14 @@ Parameters:
     Type: String
   DoneTopicArn:
     Type: String
+  VpcId:
+    Type: String
+  RouteTableId:
+    Type: String
+  SecurityGroupId:
+    Type: String
+  SubnetIds:
+    Type: String
 
 Conditions:
   HasPermissionsBoundary:
@@ -44,6 +52,51 @@ Conditions:
           - !Ref RolePermissionsBoundary
 
 Resources:
+#  Subnet1:
+#    Type: AWS::EC2::Subnet
+#    Properties:
+#      VpcId:
+#        Ref: VpcId
+#      CidrBlock: 10.0.1.0/24
+#      AvailabilityZone: "us-west-2a"
+#  EfsSecurityGroup:
+#    Type: AWS::EC2::SecurityGroup
+#    Properties:
+#      VpcId:
+#        Ref: VpcId
+#      GroupDescription: "mnt target sg"
+#      SecurityGroupIngress:
+#        - IpProtocol: -1
+#          CidrIp: "0.0.0.0/0"
+
+  # The three VPC endpoints are needed for services used within the lambda
+  S3SynchronizerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        - !Ref RouteTableId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: "Gateway"
+      VpcId: !Ref VpcId
+
+  DynamoDBSynchronizerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      RouteTableIds:
+        - !Ref RouteTableId
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
+      VpcEndpointType: "Gateway"
+      VpcId: !Ref VpcId
+
+  SNSSynchronizerVPCEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.sns'
+      SubnetIds:
+        - !Ref SubnetIds
+      VpcEndpointType: "Interface"
+      VpcId: !Ref VpcId
+
   LambdaRole:
     Type: AWS::IAM::Role
     Properties:
@@ -101,13 +154,58 @@ Resources:
             Version: 2012-10-17
             Statement:
               - Effect: Allow
-                Action:
-                  - 's3:*Object*'
                 Resource:
                   - !Sub arn:${AWS::Partition}:s3:::${OutputBucket}/*
+                Action:
+                  - 's3:*Object*'
+        - PolicyName: EFS
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Resource: "*"  # TODO: limit this to the EFS
+                Action:
+                  - 'ec2:DescribeNetworkInterfaces'
+                  - 'ec2:CreateNetworkInterface'
+                  - 'ec2:DeleteNetworkInterface'
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:AttachNetworkInterface'
+
+
+  ### EFS File System #### https://docs.aws.amazon.com/lambda/latest/dg/configuration-filesystem.html
+  FileSystem:
+    Type: AWS::EFS::FileSystem
+    Properties:
+      Encrypted: "true"
+      PerformanceMode: generalPurpose
+
+  AccessPointResource:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref FileSystem
+      PosixUser:
+        Uid: "1001"
+        Gid: "1001"
+      RootDirectory:
+        CreationInfo:
+          OwnerGid: "1001"
+          OwnerUid: "1001"
+          Permissions: "755"
+        Path: "/mnt/zarr"
+
+  MountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId:
+        Ref: FileSystem
+      SubnetId:
+        Ref: SubnetIds
+      SecurityGroups:
+        - Ref: SecurityGroupId
 
   Lambda:
     Type: AWS::Lambda::Function
+    DependsOn: MountTarget
     Properties:
       Code:
         ImageUri: !Sub 118234403147.dkr.ecr.us-west-2.amazonaws.com/echofish-aws-resample-and-write-to-zarr-store-lambda:${ImageTag}
@@ -116,7 +214,6 @@ Resources:
       Timeout: !Ref Timeout
       ReservedConcurrentExecutions: !Ref MaxConcurrency
       Role: !GetAtt LambdaRole.Arn
-#      FileSystemConfigs: # TODO
       Environment:
         Variables:
           TABLE_NAME: !Ref FileInfoTableName
@@ -126,7 +223,14 @@ Resources:
           TOPIC_ARN: !Ref DoneTopicArn
       EphemeralStorage:
         Size: !Ref EphemeralStorageSize
-#      FileSystemConfigs:
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref SecurityGroupId
+        SubnetIds:
+          - !Ref SubnetIds
+      FileSystemConfigs:
+        - Arn: !GetAtt AccessPointResource.Arn
+          LocalMountPath: "/mnt/zarr"
 
   LambdaPermission:
     Type: AWS::Lambda::Permission

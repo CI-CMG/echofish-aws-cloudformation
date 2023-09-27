@@ -92,7 +92,7 @@ Parameters:
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230926192913
+    Default: 1.0.0.dev20230926210529
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -142,10 +142,10 @@ Parameters:
     MaxValue: 900
     Default: 240
 
-  ### [Step 4] Create Empty Zarr Store ### # TODO: "CreateCruiseZarrStoreLambda"
+  ### [Step 4] Create Empty Zarr Store ###
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230926173325
+    Default: 1.0.0.dev20230926230255
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -176,7 +176,7 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230926165435
+    Default: 1.0.0.dev20230927184145
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -195,7 +195,7 @@ Parameters:
   ResampleAndWriteToZarrStoreLambdaConcurrency:
     Type: Number
     MinValue: 1
-    Default: 3
+    Default: 5
 
   ### [Step 6] Aggregator ###
   AggregatorLambdaImageTag:
@@ -267,7 +267,6 @@ Parameters:
     Type: Number
     MinValue: 1
     Default: 2
-
   MvtMergeLambdaTimeout:
     Description: The timeout in seconds for the Zarr to MVT lambda
     Type: Number
@@ -309,6 +308,14 @@ Parameters:
     Description: The resample lambda needs EFS in a VPC to properly access processor synchronizer
     Type: String
     Default: "rtb-9ae48fe1"
+  SecurityGroupId:
+    Description: The default security group
+    Type: String
+    Default: "sg-e4c05ea6"
+  SubnetIds:
+    Description: The default subnets
+    Type: String
+    Default: "subnet-b08d96c9"  # subnet-bf887de2
 
 
 Conditions:
@@ -370,38 +377,6 @@ Conditions:
               - @GeohashLambda.version@
 
 Resources:
-  S3SynchronizerVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-#      PolicyDocument: Json
-      RouteTableIds:
-        - !Ref RouteTableId
-#      SecurityGroupIds:
-#        - String
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
-      VpcEndpointType: "Gateway"
-      VpcId: !Ref VpcId
-  DynamoDBSynchronizerVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      RouteTableIds:
-        - !Ref RouteTableId
-#      SecurityGroupIds:
-#        - String
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
-      VpcEndpointType: "Gateway"
-      VpcId: !Ref VpcId
-  SNSSynchronizerVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      #      SecurityGroupIds:
-      #        - String
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.sns'
-      SubnetIds:
-        - "subnet-b08d96c9" # TODO: need to parameterize
-        - "subnet-bf887de2"
-      VpcEndpointType: "Interface"
-      VpcId: !Ref VpcId
 
   DynamoDbStack:
     Type: AWS::CloudFormation::Stack
@@ -604,7 +579,6 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
-
   ### [Step 3] Zarr Cruise Accumulator ###
   ZarrCruiseAccumulatorLambdaStack:
     Type: AWS::CloudFormation::Stack
@@ -697,29 +671,6 @@ Resources:
           - DeploymentBucketName:
               Fn::ImportValue: !Sub ${StackPrefix}-echofish-deployment-bucket
 
-#        Fn::Sub:
-#          - ${StackPrefix}-${AWS::AccountId}-EFS
-  ### EFS File System ####
-#  FileSystem:
-#    Type: AWS::EFS::FileSystem
-#    Properties:
-#      PerformanceMode: generalPurpose
-#
-#  AccessPointResource:
-#    Type: AWS::EFS::AccessPoint
-#    Properties:
-#      FileSystemId:
-#        Ref: FileSystem
-#      PosixUser:
-#        Uid: "1001"
-#        Gid: "1001"
-#      RootDirectory:
-#        CreationInfo:
-#          OwnerGid: "1001"
-#          OwnerUid: "1001"
-#          Permissions: "755"
-##        Path: "/efs"
-
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaStack:
     Type: AWS::CloudFormation::Stack
@@ -758,6 +709,10 @@ Resources:
           Fn::GetAtt:
             - MessagingStack
             - Outputs.ResampleAndWriteToZarrStoreDeadLetterTopicArn
+        VpcId: !Ref VpcId
+        RouteTableId: !Ref RouteTableId
+        SecurityGroupId: !Ref SecurityGroupId
+        SubnetIds: !Ref SubnetIds
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/resample-and-write-to-zarr-store-lambda-stack.yaml
