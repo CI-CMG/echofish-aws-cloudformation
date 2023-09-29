@@ -5,34 +5,30 @@
     <format>zip</format>
   </formats>
   <dependencySets>
+    <dependencySet>
+      <outputDirectory>lambda</outputDirectory>
+      <unpack>false</unpack>
+      <useTransitiveDependencies>false</useTransitiveDependencies>
+      <outputFileNameMapping>${artifact.artifactId}-${artifact.baseVersion}${dashClassifier?}.${artifact.extension}</outputFileNameMapping>
+      <includes>
+        <include>*:*:*:lambda</include>
+      </includes>
+      <excludes>
+        <exclude>*:*:*:*:*-SNAPSHOT</exclude>
+      </excludes>
+      <useProjectArtifact>false</useProjectArtifact>
+    </dependencySet>
    <dependencySet>
      <outputDirectory>lambda</outputDirectory>
      <unpack>false</unpack>
      <useTransitiveDependencies>false</useTransitiveDependencies>
      <outputFileNameMapping>${artifact.artifactId}-${artifact.baseVersion}${dashTimestamp}${dashClassifier?}.${artifact.extension}</outputFileNameMapping>
      <includes>
-       <include>*:*:*:lambda</include>
+       <include>*:*:*:lambda:*-SNAPSHOT</include>
      </includes>
      <useProjectArtifact>false</useProjectArtifact>
    </dependencySet>
-<!--    <dependencySet>-->
-<!--      <outputDirectory>ui</outputDirectory>-->
-<!--      <unpack>false</unpack>-->
-<!--      <useTransitiveDependencies>false</useTransitiveDependencies>-->
-<!--      <outputFileNameMapping>${artifact.artifactId}-${artifact.baseVersion}${dashTimestamp}${dashClassifier?}.${artifact.extension}</outputFileNameMapping>-->
-<!--      <includes>-->
-<!--        <include>*:echofish-aws-ui:zip:zip</include>-->
-<!--      </includes>-->
-<!--      <useProjectArtifact>false</useProjectArtifact>-->
-<!--    </dependencySet>-->
   </dependencySets>
-<!--  <files>-->
-<!--    <file>-->
-<!--      <source>${project.parent.basedir}/echofish-aws-mvtgen/target/echofish-aws-mvtgen-${project.version}-docker.tar.gz</source>-->
-<!--      <outputDirectory>docker</outputDirectory>-->
-<!--      <destName>echofish-aws-mvtgen-${artifact.baseVersion}${dashTimestamp}-docker.tar.gz</destName>-->
-<!--    </file>-->
-<!--  </files>-->
   <fileSets>
     <fileSet>
       <directory>target/cloudformation</directory>
