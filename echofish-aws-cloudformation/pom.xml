@@ -28,7 +28,7 @@
   <properties>
     <CruiseSplitterLambda.version>1.0.0-SNAPSHOT</CruiseSplitterLambda.version>
     <ZarrCruiseAccumulatorLambda.version>1.0.0-SNAPSHOT</ZarrCruiseAccumulatorLambda.version>
-    <BucketDrainLambda.version>1.0.0-SNAPSHOT</BucketDrainLambda.version>
+    <BucketDrainLambda.version>1.0.1</BucketDrainLambda.version>
     <RawToZarrErrorLambda.version>1.0.0-SNAPSHOT</RawToZarrErrorLambda.version>
     <CreateEmptyZarrStoreLambda.version>1.0.0-SNAPSHOT</CreateEmptyZarrStoreLambda.version>
     <Zarr2MvtLambda.version>1.0.0-SNAPSHOT</Zarr2MvtLambda.version>
