@@ -304,10 +304,10 @@ Parameters:
     Description: The resample lambda needs EFS in a VPC to properly access processor synchronizer
     Type: String
     Default: "vpc-70e36a08"
-  RouteTableId:
-    Description: The resample lambda needs EFS in a VPC to properly access processor synchronizer
-    Type: String
-    Default: "rtb-9ae48fe1"
+#  RouteTableId:
+#    Description: The resample lambda needs EFS in a VPC to properly access processor synchronizer
+#    Type: String
+#    Default: "rtb-9ae48fe1"
   SecurityGroupId:
     Description: The default security group
     Type: String
@@ -701,7 +701,7 @@ Resources:
             - MessagingStack
             - Outputs.ResampleAndWriteToZarrStoreDeadLetterTopicArn
         VpcId: !Ref VpcId
-        RouteTableId: !Ref RouteTableId
+#        RouteTableId: !Ref RouteTableId
         SecurityGroupId: !Ref SecurityGroupId
         SubnetIds: !Ref SubnetIds
       TemplateURL:

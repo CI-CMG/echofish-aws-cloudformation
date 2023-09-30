@@ -37,8 +37,8 @@ Parameters:
     Type: String
   VpcId:
     Type: String
-  RouteTableId:
-    Type: String
+#  RouteTableId:
+#    Type: String
   SecurityGroupId:
     Type: String
   SubnetIds:
@@ -68,13 +68,20 @@ Resources:
 #      SecurityGroupIngress:
 #        - IpProtocol: -1
 #          CidrIp: "0.0.0.0/0"
+  RouteTableSynchronizerVPCEndpoint:
+    Type: AWS::EC2::RouteTable
+    Properties:
+#      Tags:
+#        - Tag
+      VpcId: !Ref VpcId
 
   # The three VPC endpoints are needed for services used within the lambda
   S3SynchronizerVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       RouteTableIds:
-        - !Ref RouteTableId
+        - !Ref RouteTableSynchronizerVPCEndpoint
+#        - !Ref RouteTableId
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcEndpointType: "Gateway"
       VpcId: !Ref VpcId
@@ -83,7 +90,8 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       RouteTableIds:
-        - !Ref RouteTableId
+        - !Ref RouteTableSynchronizerVPCEndpoint
+#        - !Ref RouteTableId
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
       VpcEndpointType: "Gateway"
       VpcId: !Ref VpcId
