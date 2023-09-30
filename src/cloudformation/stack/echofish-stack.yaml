@@ -56,7 +56,7 @@ Parameters:
   ### [Step 0] Indexing ###
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230828212128
+    Default: 1.0.0
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
