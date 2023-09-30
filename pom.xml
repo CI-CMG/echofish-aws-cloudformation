@@ -55,7 +55,7 @@
   -->
 
   <properties>
-    <CruiseSplitterLambda.version>1.0.0-SNAPSHOT</CruiseSplitterLambda.version>
+    <CruiseSplitterLambda.version>1.0.0</CruiseSplitterLambda.version>
     <ZarrCruiseAccumulatorLambda.version>1.0.0</ZarrCruiseAccumulatorLambda.version>
     <BucketDrainLambda.version>1.0.1</BucketDrainLambda.version>
     <RawToZarrErrorLambda.version>1.0.0</RawToZarrErrorLambda.version>
