@@ -56,7 +56,7 @@ Parameters:
   ### [Step 0] Indexing ###
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.0.0
+    Default: 1.1.0.dev20230930040913
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -92,7 +92,7 @@ Parameters:
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230926210529
+    Default: 1.0.0.dev20230930061738
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -145,7 +145,7 @@ Parameters:
   ### [Step 4] Create Empty Zarr Store ###
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0
+    Default: 1.0.0.dev20230930053545
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -176,17 +176,17 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230927222717
+    Default: 1.0.0.dev20230930044753
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
     MaxValue: 10240
-    Default: 4096
+    Default: 10240
   ResampleAndWriteToZarrStoreLambdaEphemeralStorageSize:
     Type: Number
     MinValue: 512
     MaxValue: 10240
-    Default: 5120
+    Default: 10240
   ResampleAndWriteToZarrStoreLambdaTimeout:
     Type: Number
     MinValue: 1
@@ -195,17 +195,17 @@ Parameters:
   ResampleAndWriteToZarrStoreLambdaConcurrency:
     Type: Number
     MinValue: 1
-    Default: 5
+    Default: 10
 
   ### [Step 6] Aggregator ###
   AggregatorLambdaImageTag:
     Type: String
-    Default: 1.0.0
+    Default: 1.0.0.dev20230930060113
   AggregatorLambdaMemorySize:
     Type: Number
     MinValue: 128
     MaxValue: 10240
-    Default: 128
+    Default: 512
   AggregatorLambdaEphemeralStorageSize:
     Type: Number
     MinValue: 512
@@ -215,7 +215,7 @@ Parameters:
     Type: Number
     MinValue: 1
     MaxValue: 900
-    Default: 60
+    Default: 900  # TODO: takes >60 seconds to update the pipeline status values for 58 files
   AggregatorLambdaConcurrency:
     Type: Number
     MinValue: 1
