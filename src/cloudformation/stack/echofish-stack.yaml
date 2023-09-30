@@ -56,7 +56,7 @@ Parameters:
   ### [Step 0] Indexing ###
   IndexingLambdaImageTag:
     Type: String
-    Default: 1.1.0.dev20230930040913
+    Default: 1.0.0
   IndexingLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -145,7 +145,7 @@ Parameters:
   ### [Step 4] Create Empty Zarr Store ###
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230930053545
+    Default: 1.0.0
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -200,7 +200,7 @@ Parameters:
   ### [Step 6] Aggregator ###
   AggregatorLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230930060113
+    Default: 1.0.0
   AggregatorLambdaMemorySize:
     Type: Number
     MinValue: 128
