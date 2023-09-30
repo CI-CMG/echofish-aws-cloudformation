@@ -145,7 +145,7 @@ Parameters:
   ### [Step 4] Create Empty Zarr Store ###
   CreateEmptyZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230926230255
+    Default: 1.0.0
   CreateEmptyZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
