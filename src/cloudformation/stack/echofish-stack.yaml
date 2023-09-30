@@ -92,7 +92,7 @@ Parameters:
   ### [Step 2a] Raw to Zarr ###
   RawToZarrLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230930061738
+    Default: 1.0.0
   RawToZarrLambdaMemorySize:
     Type: Number
     MinValue: 128
