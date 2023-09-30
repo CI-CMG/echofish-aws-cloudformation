@@ -176,7 +176,7 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.0.0.dev20230930044753
+    Default: 1.0.0
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
