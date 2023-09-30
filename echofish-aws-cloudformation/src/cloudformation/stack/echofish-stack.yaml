@@ -351,14 +351,6 @@ Conditions:
           - Fn::Split:
               - "-SNAPSHOT"
               - @BucketDrainLambda.version@
-  CreateEmptyZarrStoreLambdaIsRelease:
-    Fn::Equals:
-      - @CreateEmptyZarrStoreLambda.version@
-      - Fn::Join:
-          - ""
-          - Fn::Split:
-              - "-SNAPSHOT"
-              - @CreateEmptyZarrStoreLambda.version@
   Zarr2MvtLambdaIsRelease:
     Fn::Equals:
       - @Zarr2MvtLambda.version@
@@ -634,7 +626,6 @@ Resources:
         EphemeralStorageSize: !Ref CreateEmptyZarrStoreLambdaEphemeralStorageSize
         Timeout: !Ref CreateEmptyZarrStoreLambdaTimeout
         MaxConcurrency: !Ref LambdaConcurrency # RawToZarrErrorLambdaConcurrency
-#        Version: !If [ CreateEmptyZarrStoreLambdaIsRelease, @CreateEmptyZarrStoreLambda.version@, @CreateEmptyZarrStoreLambda.version@@dashTimestamp@ ]
         FileInfoTableArn:
           Fn::GetAtt:
             - DynamoDbStack
@@ -790,7 +781,7 @@ Resources:
         TopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.EmailDataManagerTopicArn
+            - Outputs.MvtStartTopicArn
         DeadLetterTopicArn:
           Fn::GetAtt:
             - MessagingStack
@@ -867,7 +858,7 @@ Resources:
         TopicArn:
           Fn::GetAtt:
             - MessagingStack
-            - Outputs.EmailDataManagerTopicArn
+            - Outputs.MvtStartTopicArn
         DeadLetterTopicArn:
           Fn::GetAtt:
             - MessagingStack

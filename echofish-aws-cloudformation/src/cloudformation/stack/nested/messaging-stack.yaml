@@ -227,7 +227,20 @@ Resources:
           Value: !Ref StackPrefix
       TopicName: !Sub ${StackPrefix}-geohash-dlq
 
+  MvtStartTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Tags:
+        - Key: Application
+          Value: EchoFish
+        - Key: StackPrefix
+          Value: !Ref StackPrefix
+      TopicName: !Sub ${StackPrefix}-mvt-start
+
 Outputs:
+  MvtStartTopicArn:
+    Value: !Ref MvtStartTopic
+
   ### [Step 0] Indexing ###
   IndexLambdaTopicArn:
     Value: !Ref IndexLambdaTopic
