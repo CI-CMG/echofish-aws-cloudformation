@@ -111,7 +111,7 @@ Parameters:
   RawToZarrLambdaConcurrency:
     Type: Number
     MinValue: 1
-    Default: 10
+    Default: 5
 
   ### [Step 2b] Raw to Zarr Error Handler ###
   RawToZarrErrorLambdaMemorySize:
@@ -140,7 +140,7 @@ Parameters:
     Type: Number
     MinValue: 1
     MaxValue: 900
-    Default: 240
+    Default: 300
 
   ### [Step 4] Create Empty Zarr Store ###
   CreateEmptyZarrStoreLambdaImageTag:
@@ -164,7 +164,7 @@ Parameters:
   CreateEmptyZarrStoreLambdaConcurrency:
     Type: Number
     MinValue: 1
-    Default: 3
+    Default: 1
 #  CreateEmptyZarrStoreLambdaOverwriteExistingZarrStore:
 #    Type: String
 #    Default: "False"
@@ -176,7 +176,7 @@ Parameters:
   ### [Step 5] Resample and Write to Zarr Store ###
   ResampleAndWriteToZarrStoreLambdaImageTag:
     Type: String
-    Default: 1.1.0.dev20231001015719
+    Default: 1.0.0
   ResampleAndWriteToZarrStoreLambdaMemorySize:
     Type: Number
     MinValue: 128
@@ -195,7 +195,7 @@ Parameters:
   ResampleAndWriteToZarrStoreLambdaConcurrency:
     Type: Number
     MinValue: 1
-    Default: 10
+    Default: 5
 
   ### [Step 6] Aggregator ###
   AggregatorLambdaImageTag:

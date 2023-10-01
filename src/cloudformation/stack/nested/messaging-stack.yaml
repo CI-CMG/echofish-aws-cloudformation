@@ -147,10 +147,6 @@ Resources:
     Type: AWS::SNS::Topic
     Properties:
       TopicName: !Sub ${StackPrefix}-email-data-manager
-#      Subscription:
-#        - Endpoint: !Ref DataManagerEmail
-#          Protocol: "email"
-##          TopicArn:
       Tags:
         - Key: Application
           Value: EchoFish
