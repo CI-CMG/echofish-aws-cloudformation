@@ -4,11 +4,15 @@
     "ParameterValue": "my-stack-prefix matches deployment"
   },
   {
-    "ParameterKey": "LambdaRolePermissionsBoundary",
+    "ParameterKey": "RolePermissionsBoundary",
     "ParameterValue": "The required CU AWS Boundary"
   },
   {
-    "ParameterKey": "DataSetBucketName",
-    "ParameterValue": "The required bucket name for the public data set"
+    "ParameterKey": "OutputBucketUserAccessKeyPsName",
+    "ParameterValue": "NODD key for public dataset bucket"
+  },
+  {
+    "ParameterKey": "OutputBucketUserSecretAccessKeyPsName",
+    "ParameterValue": "NODD secret for public dataset bucket"
   }
 ]
