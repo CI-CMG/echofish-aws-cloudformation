@@ -14,13 +14,10 @@ Parameters:
     Type: String
   DevOutputBucketUserAlias:
     Type: String
-    Default: ""
   OutputBucketName:
     Type: String
-    Default: ""
   OutputBucketRegion:
     Type: String
-    Default: ""
 
 Conditions:
   IsProduction:
