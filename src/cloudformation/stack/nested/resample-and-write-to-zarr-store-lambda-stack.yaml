@@ -52,36 +52,30 @@ Conditions:
           - !Ref RolePermissionsBoundary
 
 Resources:
-#  Subnet1:
-#    Type: AWS::EC2::Subnet
-#    Properties:
-#      VpcId:
-#        Ref: VpcId
-#      CidrBlock: 10.0.1.0/24
-#      AvailabilityZone: "us-west-2a"
-#  EfsSecurityGroup:
-#    Type: AWS::EC2::SecurityGroup
-#    Properties:
-#      VpcId:
-#        Ref: VpcId
-#      GroupDescription: "mnt target sg"
-#      SecurityGroupIngress:
-#        - IpProtocol: -1
-#          CidrIp: "0.0.0.0/0"
-  RouteTableSynchronizerVPCEndpoint:
+  SynchronizerRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
-#      Tags:
-#        - Tag
       VpcId: !Ref VpcId
 
-  # The three VPC endpoints are needed for services used within the lambda
+  SynchronizerSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SynchronizerRouteTable
+      SubnetId: !Ref SubnetIds
+
+  SynchronizerRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: "igw-350cff4c"
+      RouteTableId: !Ref SynchronizerRouteTable
+
   S3SynchronizerVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       RouteTableIds:
-        - !Ref RouteTableSynchronizerVPCEndpoint
-#        - !Ref RouteTableId
+        - !Ref SynchronizerRouteTable
+#        - rtb-9ae48fe1
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
       VpcEndpointType: "Gateway"
       VpcId: !Ref VpcId
@@ -90,12 +84,13 @@ Resources:
     Type: AWS::EC2::VPCEndpoint
     Properties:
       RouteTableIds:
-        - !Ref RouteTableSynchronizerVPCEndpoint
-#        - !Ref RouteTableId
+        - !Ref SynchronizerRouteTable
+#        - rtb-9ae48fe1
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
       VpcEndpointType: "Gateway"
       VpcId: !Ref VpcId
 
+  # working well
   SNSSynchronizerVPCEndpoint:
     Type: AWS::EC2::VPCEndpoint
     Properties:
