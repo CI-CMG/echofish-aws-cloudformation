@@ -406,6 +406,7 @@ Resources:
         BucketDrainLambdaVersion: !If [ BucketDrainLambdaIsRelease, @BucketDrainLambda.version@, @BucketDrainLambda.version@@dashTimestamp@ ]
         DevOutputBucketUserAlias: !Ref DevOutputBucketUserAlias
         OutputBucketName: !Ref OutputBucketName
+        OutputBucketRegion: !Ref OutputBucketRegion
       TemplateURL:
         Fn::Sub:
           - https://${DeploymentBucketName}.s3.${AWS::Region}.amazonaws.com/stack/nested/bucket-stack.yaml
