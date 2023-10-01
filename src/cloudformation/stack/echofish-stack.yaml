@@ -195,7 +195,7 @@ Parameters:
   ResampleAndWriteToZarrStoreLambdaConcurrency:
     Type: Number
     MinValue: 1
-    Default: 5
+    Default: 1
 
   ### [Step 6] Aggregator ###
   AggregatorLambdaImageTag:

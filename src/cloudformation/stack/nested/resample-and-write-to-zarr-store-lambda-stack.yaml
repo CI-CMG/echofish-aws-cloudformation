@@ -126,129 +126,129 @@ Resources:
                   - 'ec2:DescribeInstances'
                   - 'ec2:AttachNetworkInterface'
 
-  SynchronizerRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref VpcId
+#  SynchronizerRouteTable:
+#    Type: AWS::EC2::RouteTable
+#    Properties:
+#      VpcId: !Ref VpcId
 
-  SynchronizerASubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref SynchronizerRouteTable
-      SubnetId: "subnet-b08d96c9"
-  SynchronizerBSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref SynchronizerRouteTable
-      SubnetId: "subnet-20dcd86b"
-  SynchronizerCSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref SynchronizerRouteTable
-      SubnetId: "subnet-bf887de2"
-  SynchronizerDSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref SynchronizerRouteTable
-      SubnetId: "subnet-48b9d463"
+#  SynchronizerASubnetRouteTableAssociation:
+#    Type: AWS::EC2::SubnetRouteTableAssociation
+#    Properties:
+#      RouteTableId: !Ref SynchronizerRouteTable
+#      SubnetId: "subnet-b08d96c9"
+#  SynchronizerBSubnetRouteTableAssociation:
+#    Type: AWS::EC2::SubnetRouteTableAssociation
+#    Properties:
+#      RouteTableId: !Ref SynchronizerRouteTable
+#      SubnetId: "subnet-20dcd86b"
+#  SynchronizerCSubnetRouteTableAssociation:
+#    Type: AWS::EC2::SubnetRouteTableAssociation
+#    Properties:
+#      RouteTableId: !Ref SynchronizerRouteTable
+#      SubnetId: "subnet-bf887de2"
+#  SynchronizerDSubnetRouteTableAssociation:
+#    Type: AWS::EC2::SubnetRouteTableAssociation
+#    Properties:
+#      RouteTableId: !Ref SynchronizerRouteTable
+#      SubnetId: "subnet-48b9d463"
 
-  SynchronizerRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: "igw-350cff4c"
-      RouteTableId: !Ref SynchronizerRouteTable
+#  SynchronizerRoute:
+#    Type: AWS::EC2::Route
+#    Properties:
+#      DestinationCidrBlock: 0.0.0.0/0
+#      GatewayId: "igw-350cff4c"
+#      RouteTableId: !Ref SynchronizerRouteTable
 
-  S3SynchronizerVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      RouteTableIds:
-        - !Ref SynchronizerRouteTable
-#        - rtb-9ae48fe1
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
-      VpcEndpointType: "Gateway"
-      VpcId: !Ref VpcId
+#  S3SynchronizerVPCEndpoint:
+#    Type: AWS::EC2::VPCEndpoint
+#    Properties:
+#      RouteTableIds:
+#        - !Ref SynchronizerRouteTable
+##        - rtb-9ae48fe1
+#      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+#      VpcEndpointType: "Gateway"
+#      VpcId: !Ref VpcId
 
-  DynamoDBSynchronizerVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      RouteTableIds:
-        - !Ref SynchronizerRouteTable
-#        - rtb-9ae48fe1
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
-      VpcEndpointType: "Gateway"
-      VpcId: !Ref VpcId
-
-  SNSSynchronizerVPCEndpoint:
-    Type: AWS::EC2::VPCEndpoint
-    Properties:
-      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.sns'
-      SubnetIds:
-#        - !Ref SubnetIds
-        - "subnet-b08d96c9"
-        - "subnet-20dcd86b"
-        - "subnet-bf887de2"
-        - "subnet-48b9d463"
-      VpcEndpointType: "Interface"
-      VpcId: !Ref VpcId
+#  DynamoDBSynchronizerVPCEndpoint:
+#    Type: AWS::EC2::VPCEndpoint
+#    Properties:
+#      RouteTableIds:
+#        - !Ref SynchronizerRouteTable
+##        - rtb-9ae48fe1
+#      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.dynamodb'
+#      VpcEndpointType: "Gateway"
+#      VpcId: !Ref VpcId
+#
+#  SNSSynchronizerVPCEndpoint:
+#    Type: AWS::EC2::VPCEndpoint
+#    Properties:
+#      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.sns'
+#      SubnetIds:
+##        - !Ref SubnetIds
+#        - "subnet-b08d96c9"
+#        - "subnet-20dcd86b"
+#        - "subnet-bf887de2"
+#        - "subnet-48b9d463"
+#      VpcEndpointType: "Interface"
+#      VpcId: !Ref VpcId
 
   ### EFS File System #### https://docs.aws.amazon.com/lambda/latest/dg/configuration-filesystem.html
-  FileSystem:
-    Type: AWS::EFS::FileSystem
-    Properties:
-      Encrypted: "true"
+#  FileSystem:
+#    Type: AWS::EFS::FileSystem
+#    Properties:
+#      Encrypted: "true"
 
 
-  AccessPointResource:
-    Type: AWS::EFS::AccessPoint
-    Properties:
-      FileSystemId: !Ref FileSystem
-      PosixUser:
-        Uid: "1001"
-        Gid: "1001"
-      RootDirectory:
-        CreationInfo:
-          OwnerGid: "1001"
-          OwnerUid: "1001"
-          Permissions: "755"
-        Path: "/mnt/zarr"
+#  AccessPointResource:
+#    Type: AWS::EFS::AccessPoint
+#    Properties:
+#      FileSystemId: !Ref FileSystem
+#      PosixUser:
+#        Uid: "1001"
+#        Gid: "1001"
+#      RootDirectory:
+#        CreationInfo:
+#          OwnerGid: "1001"
+#          OwnerUid: "1001"
+#          Permissions: "755"
+#        Path: "/mnt/zarr"
 
-  MountTargetA:
-    Type: AWS::EFS::MountTarget
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SubnetId: "subnet-b08d96c9"
-      SecurityGroups:
-        - !Ref SecurityGroupId
-  MountTargetB:
-    Type: AWS::EFS::MountTarget
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SubnetId: "subnet-20dcd86b"
-      SecurityGroups:
-        - !Ref SecurityGroupId
-  MountTargetC:
-    Type: AWS::EFS::MountTarget
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SubnetId: "subnet-bf887de2"
-      SecurityGroups:
-        - !Ref SecurityGroupId
-  MountTargetD:
-    Type: AWS::EFS::MountTarget
-    Properties:
-      FileSystemId: !Ref FileSystem
-      SubnetId: "subnet-48b9d463"
-      SecurityGroups:
-        - !Ref SecurityGroupId
+#  MountTargetA:
+#    Type: AWS::EFS::MountTarget
+#    Properties:
+#      FileSystemId: !Ref FileSystem
+#      SubnetId: "subnet-b08d96c9"
+#      SecurityGroups:
+#        - !Ref SecurityGroupId
+#  MountTargetB:
+#    Type: AWS::EFS::MountTarget
+#    Properties:
+#      FileSystemId: !Ref FileSystem
+#      SubnetId: "subnet-20dcd86b"
+#      SecurityGroups:
+#        - !Ref SecurityGroupId
+#  MountTargetC:
+#    Type: AWS::EFS::MountTarget
+#    Properties:
+#      FileSystemId: !Ref FileSystem
+#      SubnetId: "subnet-bf887de2"
+#      SecurityGroups:
+#        - !Ref SecurityGroupId
+#  MountTargetD:
+#    Type: AWS::EFS::MountTarget
+#    Properties:
+#      FileSystemId: !Ref FileSystem
+#      SubnetId: "subnet-48b9d463"
+#      SecurityGroups:
+#        - !Ref SecurityGroupId
 
   Lambda:
     Type: AWS::Lambda::Function
-    DependsOn:
-      - MountTargetA
-      - MountTargetB
-      - MountTargetC
-      - MountTargetD
+#    DependsOn:
+#      - MountTargetA
+#      - MountTargetB
+#      - MountTargetC
+#      - MountTargetD
     Properties:
       Code:
         ImageUri: !Sub 118234403147.dkr.ecr.us-west-2.amazonaws.com/echofish-aws-resample-and-write-to-zarr-store-lambda:${ImageTag}
@@ -266,18 +266,18 @@ Resources:
           TOPIC_ARN: !Ref DoneTopicArn
       EphemeralStorage:
         Size: !Ref EphemeralStorageSize
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref SecurityGroupId
-        SubnetIds:
-#          - !Ref SubnetIds
-          - "subnet-b08d96c9"
-          - "subnet-20dcd86b"
-          - "subnet-bf887de2"
-          - "subnet-48b9d463"
-      FileSystemConfigs:
-        - Arn: !GetAtt AccessPointResource.Arn
-          LocalMountPath: "/mnt/zarr"
+#      VpcConfig:
+#        SecurityGroupIds:
+#          - !Ref SecurityGroupId
+#        SubnetIds:
+##          - !Ref SubnetIds
+#          - "subnet-b08d96c9"
+#          - "subnet-20dcd86b"
+#          - "subnet-bf887de2"
+#          - "subnet-48b9d463"
+#      FileSystemConfigs:
+#        - Arn: !GetAtt AccessPointResource.Arn
+#          LocalMountPath: "/mnt/zarr"
 
   LambdaPermission:
     Type: AWS::Lambda::Permission
