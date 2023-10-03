@@ -65,3 +65,31 @@ Tear down test stack
 mvn -Daws.profile=echofish -Daws.region=us-west-2 -Ps3 -Pit exec:java@delete-stack
 ```
 
+## MVN Central
+The Maven Central build will end up here:
+```commandline
+https://repo1.maven.org/maven2/io/github/ci-cmg/echofish/
+```
+## Manually copying files between buckets
+This command copies a directory down from your dev bucket then uploads it to the NODD bucket:
+```
+export copy_path=level_1/Bell_M._Shimada/SH1507/ && aws --profile nodd-zarr --no-sign-request s3 sync s3://rudy-dev-echofish2-118234403147-echofish-dev-output/$copy_path temp-bucket-copy/$copy_path && aws --profile nodd-zarr s3 sync temp-bucket-copy/$copy_path s3://noaa-wcsd-zarr-pds/$copy_path
+```
+Just replace the variable at the beginning of the command and set up the “nodd-zarr” profile with the creds. I copied level 1 and 2 of SH1507 over.
+
+## Copying files with NODD Credentials
+To copy files from a public bucket into the NODD bucket you will need an intermediate step. The NODD credentials are locked down preventing GET requests to any other bucket.
+```commandline
+export copy_path=level_1/Bell_M._Shimada/SH1507/ && aws --profile nodd-zarr --no-sign-request s3 sync s3://rudy-dev-echofish2-118234403147-echofish-dev-output/$copy_path temp-bucket-copy/$copy_path && aws --profile nodd-zarr s3 sync temp-bucket-copy/$copy_path s3://noaa-wcsd-zarr-pds/$copy_path
+```
+
+"SaKe2015-D20150719-T190837.raw",
+"SaKe2015-D20150719-T191613.raw",
+"SaKe2015-D20150719-T192213.raw",
+"SaKe2015-D20150719-T192812.raw",
+"SaKe2015-D20150719-T193412.raw",
+"SaKe2015-D20150719-T193443.raw",
+"SaKe2015-D20150719-T194042.raw",
+"SaKe2015-D20150719-T194642.raw",
+"SaKe2015-D20150719-T195242.raw",
+"SaKe2015-D20150719-T195842.raw",
